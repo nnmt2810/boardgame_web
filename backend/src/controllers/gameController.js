@@ -37,3 +37,73 @@ exports.getLatestSession = async (req, res) => {
     res.status(500).json({ message: 'Lỗi khi tải game', error: error.message });
   }
 };
+
+exports.getLeaderboard = async (req, res) => {
+  try {
+    const { game_id } = req.params;
+
+    const leaderboard = await db('rankings')
+      .join('users', 'rankings.user_id', '=', 'users.id')
+      .select('users.username', 'rankings.high_score', 'rankings.updated_at')
+      .where('rankings.game_id', game_id)
+      .orderBy('rankings.high_score', 'desc')
+      .limit(10);
+
+    res.json(leaderboard);
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi lấy bảng xếp hạng', error: error.message });
+  }
+};
+
+// Cập nhật điểm số sau khi kết thúc game
+exports.updateScore = async (req, res) => {
+  try {
+    const { game_id, score } = req.body;
+    const user_id = req.user.id;
+
+    const existing = await db('rankings').where({ user_id, game_id }).first();
+
+    if (!existing) {
+      await db('rankings').insert({ user_id, game_id, high_score: score });
+    } else if (score > existing.high_score) {
+      // Chỉ cập nhật nếu điểm mới cao hơn điểm cũ
+      await db('rankings').where({ user_id, game_id }).update({ 
+        high_score: score,
+        updated_at: db.fn.now() 
+      });
+    }
+
+    res.json({ message: 'Cập nhật điểm thành công' });
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi cập nhật điểm', error: error.message });
+  }
+};
+
+exports.getFriendLeaderboard = async (req, res) => {
+  try {
+    const { game_id } = req.params;
+    const user_id = req.user.id;
+
+    // Lấy danh sách ID của bạn bè
+    const friends = await db('friends')
+      .where(function() {
+        this.where('user_id', user_id).orWhere('friend_id', user_id);
+      })
+      .andWhere('status', 'accepted');
+
+    const friendIds = friends.map(f => f.user_id === user_id ? f.friend_id : f.user_id);
+    friendIds.push(user_id); // Bao gồm cả chính mình trong bảng xếp hạng bạn bè
+
+    // Lấy ranking của những ID này
+    const leaderboard = await db('rankings')
+      .join('users', 'rankings.user_id', '=', 'users.id')
+      .select('users.username', 'rankings.high_score')
+      .where('rankings.game_id', game_id)
+      .whereIn('rankings.user_id', friendIds)
+      .orderBy('rankings.high_score', 'desc');
+
+    res.json(leaderboard);
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi lấy ranking bạn bè', error: error.message });
+  }
+};
