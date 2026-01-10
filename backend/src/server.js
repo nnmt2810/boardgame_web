@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
+const gameRoutes = require('./routes/gameRoutes');
 
 const app = express();
 
@@ -10,6 +11,8 @@ app.use(express.json());
 
 // Sử dụng Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/games', gameRoutes);
+
 
 app.get('/', (req, res) => {
   res.json({ message: 'Chào mừng bạn đến với Board Game API' });
