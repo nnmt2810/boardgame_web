@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import Controller from "../components/Controller";
+import Caro5Game from "../components/games/Caro5Game";
 
 const ROWS = 15;
 const COLS = 15;
@@ -17,59 +18,64 @@ const MainGame = () => {
   const [cursor, setCursor] = useState([3, 3]);
   const [view, setView] = useState("MENU");
   const [selectedGame, setSelectedGame] = useState(null);
+  const [winner, setWinner] = useState(null);
+  const caroRef = useRef(null); // Ref cho CaroGame
+
+  // Hàm reset game
+  const resetGame = () => {
+    setWinner(null);
+  };
 
   // Hàm điều khiển lệnh từ Controller
   const handleCommand = (cmd) => {
-    let [r, c] = cursor;
-
-    switch (cmd) {
-      case "UP":
-        if (r > 0) r--;
-        break;
-      case "DOWN":
-        if (r < ROWS - 1) r++;
-        break;
-      case "LEFT":
-        if (c > 0) c--;
-        break;
-      case "RIGHT":
-        if (c < COLS - 1) c++;
-        break;
-      case "BACK":
-        setView("MENU");
-        setSelectedGame(null);
-        return;
-      case "ENTER":
-        if (view === "MENU") {
+    if (view === "MENU") {
+      let [r, c] = cursor;
+      switch (cmd) {
+        case "UP":
+          if (r > 0) r--;
+          break;
+        case "DOWN":
+          if (r < ROWS - 1) r++;
+          break;
+        case "LEFT":
+          if (c > 0) c--;
+          break;
+        case "RIGHT":
+          if (c < COLS - 1) c++;
+          break;
+        case "BACK":
+          break;
+        case "ENTER":
           const game = GAMES_LIST.find((g) => g.pos[0] === r && g.pos[1] === c);
           if (game) {
             setSelectedGame(game);
             setView("IN_GAME");
+            resetGame();
           }
-        } else {
-          // Logic bấm ENTER trong khi đang chơi game (đặt quân cờ, v.v.)
-          console.log(`Action at ${r}, ${c} in game ${selectedGame.name}`);
+          break;
+        default:
+          break;
+      }
+      setCursor([r, c]);
+    } else if (view === "IN_GAME") {
+      if (cmd === "BACK") {
+        setView("MENU");
+        setSelectedGame(null);
+        resetGame();
+      } else {
+        if (selectedGame?.id === "caro5" && caroRef.current) {
+          caroRef.current.handleCommand(cmd);
         }
-        break;
-      default:
-        break;
+      }
     }
-    setCursor([r, c]);
   };
 
-  // Xác định màu sắc của từng nút bấm trên Ma trận
+  // Render button cho menu
   const renderButton = (r, c) => {
     const isCursor = cursor[0] === r && cursor[1] === c;
-    let colorClass = "bg-gray-800"; // Màu mặc định
-
-    if (view === "MENU") {
-      const gameTarget = GAMES_LIST.find(
-        (g) => g.pos[0] === r && g.pos[1] === c
-      );
-      if (gameTarget) colorClass = gameTarget.color;
-    } else {
-      colorClass = "bg-gray-700";
-    }
+    let colorClass = "bg-gray-800";
+    const gameTarget = GAMES_LIST.find((g) => g.pos[0] === r && g.pos[1] === c);
+    if (gameTarget) colorClass = gameTarget.color;
 
     return (
       <div
@@ -93,16 +99,24 @@ const MainGame = () => {
   return (
     <div className="flex flex-col md:flex-row items-center md:items-start justify-center gap-12 p-6 min-h-[calc(100vh-64px)]">
       <div className="flex flex-col items-center">
-        <div className="bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-          <div
-            className="grid gap-1.5"
-            style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
-          >
-            {Array.from({ length: ROWS }).map((_, r) =>
-              Array.from({ length: COLS }).map((_, c) => renderButton(r, c))
-            )}
+        {view === "MENU" ? (
+          <div className="bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+            <div
+              className="grid gap-1.5"
+              style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
+            >
+              {Array.from({ length: ROWS }).map((_, r) =>
+                Array.from({ length: COLS }).map((_, c) => renderButton(r, c))
+              )}
+            </div>
           </div>
-        </div>
+        ) : selectedGame?.id === "caro5" ? (
+          <Caro5Game
+            ref={caroRef}
+            onWinnerChange={setWinner}
+            onCursorChange={setCursor}
+          />
+        ) : null}
       </div>
 
       <div className="flex flex-col justify-center h-full pt-10">
@@ -122,6 +136,11 @@ const MainGame = () => {
                     )?.name || "SELECT GAME"
                   : selectedGame?.name}
               </h2>
+              {winner && (
+                <p className="text-yellow-400 text-sm mt-2">
+                  Winner: {winner === "X" ? "You" : "AI"}
+                </p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-gray-500 text-[10px] font-mono">COORD</p>
