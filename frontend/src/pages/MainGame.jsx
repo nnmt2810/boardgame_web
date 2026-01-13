@@ -3,6 +3,7 @@ import Controller from "../components/Controller";
 import Caro5Game from "../components/games/Caro5Game";
 import Caro4Game from "../components/games/Caro4Game";
 import SnakeGame from "../components/games/SnakeGame";
+import TicTacToeGame from "../components/games/TicTacToeGame";
 
 const ROWS = 15;
 const COLS = 15;
@@ -128,6 +129,13 @@ const MainGame = () => {
                 onCursorChange={setCursor}
               />
             )}
+            {selectedGame?.id === "tictactoe" && (
+              <TicTacToeGame
+                ref={caroRef}
+                onWinnerChange={setWinner}
+                onCursorChange={setCursor}
+              />
+            )}
           </>
         )}
       </div>
@@ -152,13 +160,17 @@ const MainGame = () => {
               {winner && (
                 <div className="mt-2">
                   <p className="text-yellow-400 text-sm font-bold animate-bounce uppercase">
-                    {selectedGame?.id === "snake"
-                      ? winner === "LOSE"
-                        ? "💀 GAME OVER"
-                        : "🏆 NEW RECORD!"
-                      : winner === "X"
-                      ? "🏆 YOU WIN!"
-                      : "💀 AI WIN!"}
+                    {(() => {
+                      if (selectedGame?.id === "snake") {
+                        return winner === "LOSE"
+                          ? "💀 GAME OVER"
+                          : "🏆 NEW RECORD!";
+                      }
+                      if (winner === "DRAW") {
+                        return "🤝 DRAW GAME!";
+                      }
+                      return winner === "X" ? "🏆 YOU WIN!" : "💀 AI WIN!";
+                    })()}
                   </p>
                   <p className="text-[10px] text-gray-500 italic mt-1">
                     Press BACK to exit
