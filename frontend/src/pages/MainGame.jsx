@@ -120,7 +120,14 @@ const MainGame = () => {
                 onWinnerChange={setWinner}
                 onCursorChange={setCursor}
               />
-            )}            
+            )}
+            {selectedGame?.id === "snake" && (
+              <SnakeGame
+                ref={caroRef}
+                onWinnerChange={setWinner}
+                onCursorChange={setCursor}
+              />
+            )}
           </>
         )}
       </div>
