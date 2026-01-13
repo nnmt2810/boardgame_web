@@ -41,7 +41,7 @@ const checkWin = (board, r, c, player, rows, cols) => {
         nc += dc;
       }
     }
-    if (count >= 5) return true;
+    if (count >= 4) return true;
   }
   return false;
 };

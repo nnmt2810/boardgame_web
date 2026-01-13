@@ -1,6 +1,8 @@
 import { useState, useRef } from "react";
 import Controller from "../components/Controller";
 import Caro5Game from "../components/games/Caro5Game";
+import Caro4Game from "../components/games/Caro4Game";
+import SnakeGame from "../components/games/SnakeGame";
 
 const ROWS = 15;
 const COLS = 15;
@@ -19,14 +21,12 @@ const MainGame = () => {
   const [view, setView] = useState("MENU");
   const [selectedGame, setSelectedGame] = useState(null);
   const [winner, setWinner] = useState(null);
-  const caroRef = useRef(null); // Ref cho CaroGame
+  const caroRef = useRef(null); // Ref dùng chung cho cả Caro Game
 
-  // Hàm reset game
   const resetGame = () => {
     setWinner(null);
   };
 
-  // Hàm điều khiển lệnh từ Controller
   const handleCommand = (cmd) => {
     if (view === "MENU") {
       let [r, c] = cursor;
@@ -42,8 +42,6 @@ const MainGame = () => {
           break;
         case "RIGHT":
           if (c < COLS - 1) c++;
-          break;
-        case "BACK":
           break;
         case "ENTER":
           const game = GAMES_LIST.find((g) => g.pos[0] === r && g.pos[1] === c);
@@ -63,14 +61,14 @@ const MainGame = () => {
         setSelectedGame(null);
         resetGame();
       } else {
-        if (selectedGame?.id === "caro5" && caroRef.current) {
+        // Gửi lệnh đến Game hiện tại
+        if (caroRef.current) {
           caroRef.current.handleCommand(cmd);
         }
       }
     }
   };
 
-  // Render button cho menu
   const renderButton = (r, c) => {
     const isCursor = cursor[0] === r && cursor[1] === c;
     let colorClass = "bg-gray-800";
@@ -80,14 +78,11 @@ const MainGame = () => {
     return (
       <div
         key={`${r}-${c}`}
-        className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full transition-all duration-150 flex items-center justify-center
-          ${colorClass} 
-          ${
-            isCursor
-              ? "ring-4 ring-white scale-125 z-10 shadow-lg shadow-white/50"
-              : "opacity-60"
-          }
-        `}
+        className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full transition-all duration-150 flex items-center justify-center ${colorClass} ${
+          isCursor
+            ? "ring-4 ring-white scale-125 z-10 shadow-lg shadow-white/50"
+            : "opacity-60"
+        }`}
       >
         {isCursor && (
           <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
@@ -110,13 +105,24 @@ const MainGame = () => {
               )}
             </div>
           </div>
-        ) : selectedGame?.id === "caro5" ? (
-          <Caro5Game
-            ref={caroRef}
-            onWinnerChange={setWinner}
-            onCursorChange={setCursor}
-          />
-        ) : null}
+        ) : (
+          <>
+            {selectedGame?.id === "caro5" && (
+              <Caro5Game
+                ref={caroRef}
+                onWinnerChange={setWinner}
+                onCursorChange={setCursor}
+              />
+            )}
+            {selectedGame?.id === "caro4" && (
+              <Caro4Game
+                ref={caroRef}
+                onWinnerChange={setWinner}
+                onCursorChange={setCursor}
+              />
+            )}            
+          </>
+        )}
       </div>
 
       <div className="flex flex-col justify-center h-full pt-10">
@@ -124,12 +130,12 @@ const MainGame = () => {
           <Controller onCommand={handleCommand} />
         </div>
         <div className="mt-6 w-full bg-gray-900 p-4 rounded-xl border-t-2 border-indigo-500 shadow-lg">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center text-white">
             <div>
-              <p className="text-indigo-500 text-[10px] font-mono leading-none mb-1">
+              <p className="text-indigo-400 text-[10px] font-mono mb-1">
                 SYSTEM_STATUS
               </p>
-              <h2 className="text-xl font-black text-white uppercase tracking-tighter">
+              <h2 className="text-xl font-black uppercase tracking-tighter">
                 {view === "MENU"
                   ? GAMES_LIST.find(
                       (g) => g.pos[0] === cursor[0] && g.pos[1] === cursor[1]
@@ -137,14 +143,25 @@ const MainGame = () => {
                   : selectedGame?.name}
               </h2>
               {winner && (
-                <p className="text-yellow-400 text-sm mt-2">
-                  Winner: {winner === "X" ? "You" : "AI"}
-                </p>
+                <div className="mt-2">
+                  <p className="text-yellow-400 text-sm font-bold animate-bounce uppercase">
+                    {selectedGame?.id === "snake"
+                      ? winner === "LOSE"
+                        ? "💀 GAME OVER"
+                        : "🏆 NEW RECORD!"
+                      : winner === "X"
+                      ? "🏆 YOU WIN!"
+                      : "💀 AI WIN!"}
+                  </p>
+                  <p className="text-[10px] text-gray-500 italic mt-1">
+                    Press BACK to exit
+                  </p>
+                </div>
               )}
             </div>
             <div className="text-right">
               <p className="text-gray-500 text-[10px] font-mono">COORD</p>
-              <p className="text-white font-mono text-sm">
+              <p className="font-mono text-sm">
                 {cursor[0]},{cursor[1]}
               </p>
             </div>
