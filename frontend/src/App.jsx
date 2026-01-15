@@ -1,11 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useContext } from 'react';
 import { AuthProvider, AuthContext } from './contexts/AuthContext';
-
 import Login from './pages/Login';
 import Register from './pages/Register';
 import MainGame from './pages/MainGame';
 import Navbar from './components/Navbar';
+import Profile from './pages/Profile';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
@@ -32,6 +32,15 @@ function App() {
               element={
                 <ProtectedRoute>
                   <MainGame />
+                </ProtectedRoute>
+              } 
+            />
+
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <Profile />
                 </ProtectedRoute>
               } 
             />

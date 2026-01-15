@@ -1,173 +1,105 @@
-import { useState, useImperativeHandle, forwardRef } from "react";
+import { useState, useImperativeHandle, forwardRef, useContext } from "react";
+import { AuthContext } from "../../contexts/AuthContext";
+import axiosClient from "../../api/axiosClient";
 
 const ROWS = 15;
 const COLS = 15;
 
-// Hàm kiểm tra thắng
-const checkWin = (board, r, c, player, rows, cols) => {
-  const directions = [
-    [
-      [0, 1],
-      [0, -1],
-    ], // Ngang
-    [
-      [1, 0],
-      [-1, 0],
-    ], // Dọc
-    [
-      [1, 1],
-      [-1, -1],
-    ], // Chéo thuận
-    [
-      [1, -1],
-      [-1, 1],
-    ], // Chéo ngược
-  ];
-
-  for (let dir of directions) {
-    let count = 1;
-    for (let [dr, dc] of dir) {
-      let nr = r + dr,
-        nc = c + dc;
-      while (
-        nr >= 0 &&
-        nr < rows &&
-        nc >= 0 &&
-        nc < cols &&
-        board[nr][nc] === player
-      ) {
-        count++;
-        nr += dr;
-        nc += dc;
-      }
-    }
-    if (count >= 5) return true;
-  }
-  return false;
-};
-
-// Hàm AI tìm nước đi
-const getComputerMove = (board, rows, cols) => {
-  const emptyCells = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (!board[r][c]) emptyCells.push([r, c]);
-    }
-  }
-
-  // Tìm nước đi để thắng ngay lập tức
-  for (let [r, c] of emptyCells) {
-    if (checkWin(board, r, c, "O", rows, cols)) return [r, c];
-  }
-
-  // Tìm nước đi để CHẶN người chơi
-  for (let [r, c] of emptyCells) {
-    if (checkWin(board, r, c, "X", rows, cols)) return [r, c];
-  }
-
-  // Nếu không có gì nguy hiểm, đánh random cạnh các quân đã có
-  return emptyCells[Math.floor(Math.random() * emptyCells.length)];
-};
-
 const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
-  const [board, setBoard] = useState(
-    Array(ROWS)
-      .fill()
-      .map(() => Array(COLS).fill(null))
-  );
+  const { user } = useContext(AuthContext);
+  const [board, setBoard] = useState(Array(ROWS).fill().map(() => Array(COLS).fill(null)));
   const [winner, setWinner] = useState(null);
   const [cursor, setCursor] = useState([7, 7]);
+  const [hasReported, setHasReported] = useState(false);
 
-  // Expose handleCommand cho MainGame gọi từ Controller
+  const reportWin = async () => {
+    if (!user || hasReported) return;
+    try {
+      setHasReported(true);
+      await axiosClient.post("/users/stats/update", {
+        stat_type: "win",
+        value: 1,
+      });
+      console.log("✓ Trận thắng Caro 5 đã được cập nhật");
+    } catch (error) {
+      console.error("Lỗi cập nhật trận thắng Caro 5:", error);
+    }
+  };
+
+  const checkWinner = (b, r, c) => {
+    const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    const player = b[r][c];
+    for (let [dr, dc] of directions) {
+      let count = 1;
+      for (let i = 1; i < 5; i++) {
+        if (b[r + dr * i]?.[c + dc * i] === player) count++;
+        else break;
+      }
+      for (let i = 1; i < 5; i++) {
+        if (b[r - dr * i]?.[c - dc * i] === player) count++;
+        else break;
+      }
+      if (count >= 5) return player;
+    }
+    if (b.flat().every(cell => cell !== null)) return "DRAW";
+    return null;
+  };
+
+  const aiMove = (currentBoard) => {
+    const empty = [];
+    currentBoard.forEach((row, r) => row.forEach((cell, c) => {
+      if (!cell) empty.push([r, c]);
+    }));
+    if (empty.length === 0) return;
+    const [r, c] = empty[Math.floor(Math.random() * empty.length)];
+    const newBoard = currentBoard.map(row => [...row]);
+    newBoard[r][c] = "O";
+    setBoard(newBoard);
+    const win = checkWinner(newBoard, r, c);
+    if (win) {
+      setWinner(win);
+      onWinnerChange(win);
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     handleCommand: (cmd) => {
+      if (winner) return;
       let [r, c] = cursor;
+      if (cmd === "UP" && r > 0) r--;
+      if (cmd === "DOWN" && r < ROWS - 1) r++;
+      if (cmd === "LEFT" && c > 0) c--;
+      if (cmd === "RIGHT" && c < COLS - 1) c++;
 
-      switch (cmd) {
-        case "UP":
-          if (r > 0) r--;
-          break;
-        case "DOWN":
-          if (r < ROWS - 1) r++;
-          break;
-        case "LEFT":
-          if (c > 0) c--;
-          break;
-        case "RIGHT":
-          if (c < COLS - 1) c++;
-          break;
-        case "ENTER":
-          if (!winner && !board[r][c]) {
-            const newBoard = board.map((row) => [...row]);
-            newBoard[r][c] = "X";
-            setBoard(newBoard);
-            if (checkWin(newBoard, r, c, "X", ROWS, COLS)) {
-              setWinner("X");
-              onWinnerChange("X");
-            } else {
-              const [aiR, aiC] = getComputerMove(newBoard, ROWS, COLS);
-              if (aiR !== undefined && aiC !== undefined) {
-                newBoard[aiR][aiC] = "O";
-                setBoard(newBoard);
-                if (checkWin(newBoard, aiR, aiC, "O", ROWS, COLS)) {
-                  setWinner("O");
-                  onWinnerChange("O");
-                }
-              }
-            }
-          }
-          break;
-        default:
-          break;
+      if (cmd === "ENTER" && !board[r][c]) {
+        const newBoard = board.map(row => [...row]);
+        newBoard[r][c] = "X";
+        setBoard(newBoard);
+        const win = checkWinner(newBoard, r, c);
+        if (win) {
+          setWinner(win);
+          onWinnerChange(win);
+          if (win === "X") reportWin();
+        } else {
+          setTimeout(() => aiMove(newBoard), 300);
+        }
       }
       setCursor([r, c]);
-      onCursorChange([r, c]); // Cập nhật cursor cho system status nếu cần
-    },
-  }));
-
-  // Render button cho caro
-  const renderButton = (r, c) => {
-    const isCursor = cursor[0] === r && cursor[1] === c;
-    let colorClass = "bg-gray-700";
-    let content = null;
-
-    if (board[r][c] === "X") {
-      colorClass = "bg-blue-500";
-      content = <span className="text-white font-bold text-xs">X</span>;
-    } else if (board[r][c] === "O") {
-      colorClass = "bg-red-500";
-      content = <span className="text-white font-bold text-xs">O</span>;
+      onCursorChange([r, c]);
     }
-
-    return (
-      <div
-        key={`${r}-${c}`}
-        className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full transition-all duration-150 flex items-center justify-center
-          ${colorClass} 
-          ${
-            isCursor
-              ? "ring-4 ring-white scale-125 z-10 shadow-lg shadow-white/50"
-              : "opacity-60"
-          }
-        `}
-      >
-        {content ||
-          (isCursor && !content && (
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-          ))}
-      </div>
-    );
-  };
+  }));
 
   return (
     <div className="bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-      <div
-        className="grid gap-1.5"
-        style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
-      >
-        {Array.from({ length: ROWS }).map((_, r) =>
-          Array.from({ length: COLS }).map((_, c) => renderButton(r, c))
-        )}
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}>
+        {board.map((row, r) => row.map((cell, c) => (
+          <div key={`${r}-${c}`} className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all ${
+            cell === "X" ? "bg-blue-600" : cell === "O" ? "bg-red-600" : "bg-gray-700"
+          } ${cursor[0] === r && cursor[1] === c ? "ring-4 ring-white scale-110 z-10" : "opacity-80"}`}>
+            {cell && <span className="text-white font-bold text-xs">{cell}</span>}
+            {cursor[0] === r && cursor[1] === c && !cell && <div className="w-2 h-2 bg-white rounded-full animate-pulse" />}
+          </div>
+        )))}
       </div>
     </div>
   );

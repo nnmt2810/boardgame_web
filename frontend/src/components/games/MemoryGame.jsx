@@ -1,4 +1,6 @@
-import { useState, useImperativeHandle, forwardRef, useEffect } from "react";
+import { useState, useEffect, useImperativeHandle, forwardRef, useContext } from "react"; // Thêm useContext ở đây
+import { AuthContext } from "../../contexts/AuthContext";
+import axiosClient from "../../api/axiosClient";
 
 const ROWS = 15;
 const COLS = 15;
@@ -20,11 +22,29 @@ const COLORS = [
 ];
 
 const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
+  const { user } = useContext(AuthContext);
   const [grid, setGrid] = useState([]);
   const [flipped, setFlipped] = useState([]);
   const [solved, setSolved] = useState([]); // Các ô đã tìm đúng cặp
   const [cursor, setCursor] = useState([5, 5]);
   const [isLock, setIsLock] = useState(false); // Khóa khi đang đợi lật úp
+  const [hasReported, setHasReported] = useState(false);
+
+  // Hàm gửi kết quả thắng lên backend
+  const reportWin = async () => {
+    if (!user || hasReported) return;
+
+    try {
+      setHasReported(true);
+      await axiosClient.post("/users/stats/update", {
+        stat_type: "win",
+        value: 1,
+      });
+      console.log("✓ Kết quả Memory đã được cập nhật");
+    } catch (error) {
+      console.error("Lỗi cập nhật Memory:", error);
+    }
+  };
 
   // Khởi tạo bàn cờ ngẫu nhiên
   useEffect(() => {
@@ -75,6 +95,7 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
             // Kiểm tra thắng cuộc
             if (solved.length + 2 === 16) {
               onWinnerChange("X");
+              reportWin();
             }
           } else {
             // Không khớp -> Đợi 1s rồi úp lại

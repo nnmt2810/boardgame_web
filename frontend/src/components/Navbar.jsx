@@ -25,14 +25,19 @@ const Navbar = () => {
               <Gamepad2 className="w-8 h-8" />
               <span className="hidden sm:block">AncientGame</span>
             </Link>
-
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 px-3 py-1 bg-gray-100 rounded-full">
-              <User size={16} className="text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">{user.username}</span>
-            </div>
+            <Link 
+              to="/profile" 
+              className="flex items-center space-x-2 px-4 py-1.5 bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-full transition-all duration-200 border border-transparent hover:border-indigo-200 group"
+              title="Xem hồ sơ cá nhân"
+            >
+              <User size={16} className="text-gray-500 group-hover:text-indigo-600" />
+              <span className="text-sm font-bold text-gray-700 group-hover:text-indigo-600">
+                {user.username}
+              </span>
+            </Link>
             
             <button 
               onClick={handleLogout}
@@ -49,7 +54,6 @@ const Navbar = () => {
   );
 };
 
-// Component phụ cho các nút trên Navbar
 const NavItem = ({ to, icon, label }) => (
   <Link 
     to={to} 
