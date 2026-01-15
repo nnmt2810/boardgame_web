@@ -4,6 +4,7 @@ import Caro5Game from "../components/games/Caro5Game";
 import Caro4Game from "../components/games/Caro4Game";
 import SnakeGame from "../components/games/SnakeGame";
 import TicTacToeGame from "../components/games/TicTacToeGame";
+import MemoryGame from "../components/games/MemoryGame";
 
 const ROWS = 15;
 const COLS = 15;
@@ -131,6 +132,13 @@ const MainGame = () => {
             )}
             {selectedGame?.id === "tictactoe" && (
               <TicTacToeGame
+                ref={caroRef}
+                onWinnerChange={setWinner}
+                onCursorChange={setCursor}
+              />
+            )}
+            {selectedGame?.id === "memory" && (
+              <MemoryGame
                 ref={caroRef}
                 onWinnerChange={setWinner}
                 onCursorChange={setCursor}
