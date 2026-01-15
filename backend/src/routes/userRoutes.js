@@ -4,5 +4,6 @@ const userController = require('../controllers/userController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 
 router.get('/me', verifyToken, userController.getProfile);
+router.post('/stats/update', verifyToken, userController.updatePlayerStats);
 
 module.exports = router;
