@@ -15,7 +15,9 @@ const Login = () => {
       await login(username, password);
       navigate('/'); 
     } catch (error) {
-      alert("Lỗi: " + (error.response?.data?.message || "Đăng nhập thất bại"));
+      const errorMessage = error.response?.data?.message || error.message || "Đăng nhập thất bại";
+      console.error('Login error:', error);
+      alert("Lỗi: " + errorMessage);
     }
   };
 

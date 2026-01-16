@@ -1,16 +1,16 @@
-const knex = require('knex')(require('../../knexfile').development);
+const db = require('../database/db');
 
 const User = {
   findByUsername: (username) => {
-    return knex('users').where({ username }).first();
+    return db('users').where({ username }).first();
   },
   
   findById: (id) => {
-    return knex('users').where({ id }).first().select('id', 'username', 'email', 'role');
+    return db('users').where({ id }).first().select('id', 'username', 'email', 'role');
   },
 
   create: (userData) => {
-    return knex('users').insert(userData).returning(['id', 'username', 'email', 'role']);
+    return db('users').insert(userData).returning(['id', 'username', 'email', 'role']);
   }
 };
 

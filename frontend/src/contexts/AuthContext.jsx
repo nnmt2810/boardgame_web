@@ -22,10 +22,19 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (username, password) => {
-    const res = await axiosClient.post('/auth/login', { username, password });
-    localStorage.setItem('token', res.data.token);
-    setUser(res.data.user);
-    return res.data;
+    try {
+      const res = await axiosClient.post('/auth/login', { username, password });
+      if (res.data.token) {
+        localStorage.setItem('token', res.data.token);
+        setUser(res.data.user);
+        return res.data;
+      } else {
+        throw new Error('Không nhận được token từ server');
+      }
+    } catch (error) {
+      console.error('Login error in AuthContext:', error);
+      throw error;
+    }
   };
 
   const logout = () => {
