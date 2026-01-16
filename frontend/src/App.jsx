@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import MainGame from './pages/MainGame';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 import Profile from './pages/Profile';
 
 const ProtectedRoute = ({ children }) => {
@@ -20,7 +21,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="min-h-screen bg-gray-50 text-gray-900">
+        <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col">
           <Navbar />
 
           <Routes>
@@ -47,6 +48,8 @@ function App() {
 
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
+          
+          <Footer />
         </div>
       </Router>
     </AuthProvider>
