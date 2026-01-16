@@ -7,7 +7,10 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "migrate": "knex migrate:latest",
-    "seed": "knex seed:run"
+    "seed": "knex seed:run",
+    "seed:users": "knex seed:run --specific=seed_users.js",
+    "seed:games": "knex seed:run --specific=seed_games.js",
+    "seed:data": "knex seed:run --specific=seed_data.js"
   },
   "keywords": [],
   "author": "",
