@@ -25,12 +25,7 @@ exports.getProfile = async (req, res) => {
       .select('id', 'username');
 
     // Lấy số lượng bạn bè
-    const friendsCount = await db('friends')
-      .where(function() {
-        this.where('user_id', user_id).orWhere('friend_id', user_id);
-      })
-      .andWhere('status', 'accepted')
-      .count('id as total');
+    const totalFriends = friendsDetails.length;
 
     // Lấy danh sách điểm cao nhất theo từng game
     const topScores = await db('rankings')
@@ -38,10 +33,16 @@ exports.getProfile = async (req, res) => {
       .where('rankings.user_id', user_id)
       .select('games.name as game_name', 'rankings.high_score', 'rankings.updated_at');
     
+    console.log('Profile data:', {
+      user_id,
+      friendsCount: friendsDetails.length,
+      totalFriends
+    });
+    
     res.json({
       userInfo: user,
       friends: friendsDetails,
-      totalFriends: parseInt(friendsCount[0].total),
+      totalFriends: totalFriends,
       achievements: topScores
     });
 

@@ -1,5 +1,6 @@
 const db = require('../database/db');
 
+// Lưu trạng thái game
 exports.saveSession = async (req, res) => {
   try {
     const { game_id, matrix_state, current_score, time_elapsed } = req.body;
@@ -20,6 +21,7 @@ exports.saveSession = async (req, res) => {
   }
 };
 
+// Lấy bản lưu gần nhất
 exports.getLatestSession = async (req, res) => {
   try {
     const { game_id } = req.params;
@@ -38,6 +40,7 @@ exports.getLatestSession = async (req, res) => {
   }
 };
 
+// Lấy bảng xếp hạng toàn cầu cho một game
 exports.getLeaderboard = async (req, res) => {
   try {
     const { game_id } = req.params;
@@ -69,7 +72,7 @@ exports.updateScore = async (req, res) => {
       // Chỉ cập nhật nếu điểm mới cao hơn điểm cũ
       await db('rankings').where({ user_id, game_id }).update({ 
         high_score: score,
-        updated_at: db.fn.now() 
+        updated_at: db.raw('NOW()') 
       });
     }
 
@@ -79,6 +82,7 @@ exports.updateScore = async (req, res) => {
   }
 };
 
+// Lấy bảng xếp hạng bạn bè cho một game
 exports.getFriendLeaderboard = async (req, res) => {
   try {
     const { game_id } = req.params;
