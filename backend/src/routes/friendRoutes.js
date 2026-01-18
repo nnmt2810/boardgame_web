@@ -7,5 +7,6 @@ router.post('/request', verifyToken, friendController.sendFriendRequest);
 router.post('/accept', verifyToken, friendController.acceptFriendRequest);
 router.get('/list', verifyToken, friendController.getFriendsList);
 router.get('/pending', verifyToken, friendController.getPendingRequests);
+router.delete('/:friendId', verifyToken, friendController.removeFriend);
 
 module.exports = router;

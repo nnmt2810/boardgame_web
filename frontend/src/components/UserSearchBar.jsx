@@ -62,32 +62,24 @@ const UserSearchBar = () => {
   }, []);
 
   const handleSendFriendRequest = async (targetUserId) => {
+    // Không cho phép gửi nếu đã gửi hoặc là bạn
+    const target = results.find(r => r.id === targetUserId);
+    if (!target || target.friendStatus === 'pending' || target.friendStatus === 'accepted') return;
+
+    // Đánh dấu pending
+    setResults(prev => prev.map(u => u.id === targetUserId ? { ...u, friendStatus: 'pending' } : u));
+
     try {
       await axiosClient.post('/friends/request', { friend_id: targetUserId });
-      // Cập nhật trạng thái trong results
-      setResults(results.map(u => 
-        u.id === targetUserId 
-          ? { ...u, friendStatus: 'pending' }
-          : u
-      ));
+      console.log(`Friend request sent to ${targetUserId}`);
     } catch (error) {
       console.error('Error sending friend request:', error);
-      alert(error.response?.data?.message || 'Lỗi gửi lời mời kết bạn');
+      // Rollback UI nếu thất bại
+      setResults(prev => prev.map(u => u.id === targetUserId ? { ...u, friendStatus: null } : u));
     }
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'accepted':
-        return <UserCheck className="w-4 h-4 text-green-500" />;
-      case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-500" />;
-      default:
-        return <UserPlus className="w-4 h-4 text-gray-400" />;
-    }
-  };
-
-  const getStatusText = (status) => {
+  const getButtonLabel = (status) => {
     switch (status) {
       case 'accepted':
         return 'Đã là bạn bè';
@@ -115,68 +107,52 @@ const UserSearchBar = () => {
             onClick={() => {
               setSearchTerm('');
               setResults([]);
-              setShowResults(false);
             }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            aria-label="Clear search"
           >
             <X size={16} />
           </button>
         )}
       </div>
 
-      {/* Kết quả tìm kiếm */}
-      {showResults && (
-        <div
-          ref={resultsRef}
-          className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 max-h-96 overflow-y-auto z-50"
-        >
-          {loading ? (
-            <div className="p-4 text-center text-gray-500 text-sm">
-              Đang tìm kiếm...
-            </div>
-          ) : results.length === 0 ? (
-            <div className="p-4 text-center text-gray-500 text-sm">
-              Không tìm thấy người dùng nào
-            </div>
-          ) : (
-            <div className="py-2">
-              {results.map((resultUser) => (
-                <div
-                  key={resultUser.id}
-                  className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0"
-                >
-                  <div className="flex items-center space-x-3 flex-1">
-                    <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">
-                      {resultUser.username.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-800 truncate">
-                        {resultUser.username}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {resultUser.email}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={() => handleSendFriendRequest(resultUser.id)}
-                    disabled={resultUser.friendStatus === 'accepted' || resultUser.friendStatus === 'pending'}
-                    className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      resultUser.friendStatus === 'accepted'
-                        ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                        : resultUser.friendStatus === 'pending'
-                        ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed'
-                        : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'
-                    }`}
-                  >
-                    {getStatusIcon(resultUser.friendStatus)}
-                    <span>{getStatusText(resultUser.friendStatus)}</span>
-                  </button>
+      {showResults && results.length > 0 && (
+        <div ref={resultsRef} className="absolute z-40 mt-2 left-0 right-0 bg-white rounded-lg shadow-lg max-h-72 overflow-auto">
+          {results.map(resultUser => (
+            <div
+              key={resultUser.id}
+              className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0"
+            >
+              <div className="flex items-center space-x-3 flex-1">
+                <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">
+                  {resultUser.username.charAt(0).toUpperCase()}
                 </div>
-              ))}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 truncate">
+                    {resultUser.username}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {resultUser.email}
+                  </p>
+                </div>
+              </div>
+              
+              <button
+                onClick={() => handleSendFriendRequest(resultUser.id)}
+                disabled={resultUser.friendStatus === 'accepted' || resultUser.friendStatus === 'pending'}
+                className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  resultUser.friendStatus === 'accepted'
+                    ? 'bg-green-100 text-green-700 cursor-default'
+                    : resultUser.friendStatus === 'pending'
+                    ? 'bg-yellow-50 text-yellow-700 cursor-default'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                }`}
+              >
+                {resultUser.friendStatus === 'accepted' ? <UserCheck size={14} /> : resultUser.friendStatus === 'pending' ? <Clock size={14} /> : <UserPlus size={14} />}
+                <span>{getButtonLabel(resultUser.friendStatus)}</span>
+              </button>
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
@@ -184,4 +160,3 @@ const UserSearchBar = () => {
 };
 
 export default UserSearchBar;
-
