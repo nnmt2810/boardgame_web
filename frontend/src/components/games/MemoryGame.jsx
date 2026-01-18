@@ -1,4 +1,10 @@
-import { useState, useEffect, useImperativeHandle, forwardRef, useContext } from "react"; // Thêm useContext ở đây
+import {
+  useState,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
+  useContext,
+} from "react"; // Thêm useContext ở đây
 import { AuthContext } from "../../contexts/AuthContext";
 import axiosClient from "../../api/axiosClient";
 
@@ -109,6 +115,26 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       setCursor([r, c]);
       onCursorChange([r, c]);
     },
+    getState: async () => {
+      return {
+        matrix_state: { grid, flipped, solved },
+        current_score: 0,
+        time_elapsed: 0,
+      };
+    },
+    loadState: (session) => {
+      try {
+        const parsed =
+          typeof session.matrix_state === "string"
+            ? JSON.parse(session.matrix_state)
+            : session.matrix_state;
+        if (parsed?.grid) setGrid(parsed.grid);
+        if (parsed?.flipped) setFlipped(parsed.flipped);
+        if (parsed?.solved) setSolved(parsed.solved);
+      } catch (err) {
+        console.error("Lỗi loadState Memory:", err);
+      }
+    }
   }));
 
   const renderButton = (r, c) => {
@@ -150,7 +176,7 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: ROWS }).map((_, r) =>
-          Array.from({ length: COLS }).map((_, c) => renderButton(r, c))
+          Array.from({ length: COLS }).map((_, c) => renderButton(r, c)),
         )}
       </div>
     </div>

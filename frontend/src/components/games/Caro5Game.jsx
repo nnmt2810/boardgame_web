@@ -7,7 +7,11 @@ const COLS = 15;
 
 const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const { user } = useContext(AuthContext);
-  const [board, setBoard] = useState(Array(ROWS).fill().map(() => Array(COLS).fill(null)));
+  const [board, setBoard] = useState(
+    Array(ROWS)
+      .fill()
+      .map(() => Array(COLS).fill(null)),
+  );
   const [winner, setWinner] = useState(null);
   const [cursor, setCursor] = useState([7, 7]);
   const [hasReported, setHasReported] = useState(false);
@@ -27,7 +31,12 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   };
 
   const checkWinner = (b, r, c) => {
-    const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    const directions = [
+      [0, 1],
+      [1, 0],
+      [1, 1],
+      [1, -1],
+    ];
     const player = b[r][c];
     for (let [dr, dc] of directions) {
       let count = 1;
@@ -41,18 +50,20 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       }
       if (count >= 5) return player;
     }
-    if (b.flat().every(cell => cell !== null)) return "DRAW";
+    if (b.flat().every((cell) => cell !== null)) return "DRAW";
     return null;
   };
 
   const aiMove = (currentBoard) => {
     const empty = [];
-    currentBoard.forEach((row, r) => row.forEach((cell, c) => {
-      if (!cell) empty.push([r, c]);
-    }));
+    currentBoard.forEach((row, r) =>
+      row.forEach((cell, c) => {
+        if (!cell) empty.push([r, c]);
+      }),
+    );
     if (empty.length === 0) return;
     const [r, c] = empty[Math.floor(Math.random() * empty.length)];
-    const newBoard = currentBoard.map(row => [...row]);
+    const newBoard = currentBoard.map((row) => [...row]);
     newBoard[r][c] = "O";
     setBoard(newBoard);
     const win = checkWinner(newBoard, r, c);
@@ -72,7 +83,7 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       if (cmd === "RIGHT" && c < COLS - 1) c++;
 
       if (cmd === "ENTER" && !board[r][c]) {
-        const newBoard = board.map(row => [...row]);
+        const newBoard = board.map((row) => [...row]);
         newBoard[r][c] = "X";
         setBoard(newBoard);
         const win = checkWinner(newBoard, r, c);
@@ -86,20 +97,56 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       }
       setCursor([r, c]);
       onCursorChange([r, c]);
+    },
+    getState: async () => {
+      return {
+        matrix_state: board,
+        current_score: 0,
+        time_elapsed: 0,
+      };
+    },
+    loadState: (session) => {
+      try {
+        const parsed =
+          typeof session.matrix_state === "string"
+            ? JSON.parse(session.matrix_state)
+            : session.matrix_state;
+        if (parsed) setBoard(parsed);
+        if (session.current_score != null) {
+        }
+      } catch (err) {
+        console.error("Lỗi loadState Caro5:", err);
+      }
     }
   }));
 
   return (
     <div className="bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}>
-        {board.map((row, r) => row.map((cell, c) => (
-          <div key={`${r}-${c}`} className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all ${
-            cell === "X" ? "bg-blue-600" : cell === "O" ? "bg-red-600" : "bg-gray-700"
-          } ${cursor[0] === r && cursor[1] === c ? "ring-4 ring-white scale-110 z-10" : "opacity-80"}`}>
-            {cell && <span className="text-white font-bold text-xs">{cell}</span>}
-            {cursor[0] === r && cursor[1] === c && !cell && <div className="w-2 h-2 bg-white rounded-full animate-pulse" />}
-          </div>
-        )))}
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
+      >
+        {board.map((row, r) =>
+          row.map((cell, c) => (
+            <div
+              key={`${r}-${c}`}
+              className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all ${
+                cell === "X"
+                  ? "bg-blue-600"
+                  : cell === "O"
+                    ? "bg-red-600"
+                    : "bg-gray-700"
+              } ${cursor[0] === r && cursor[1] === c ? "ring-4 ring-white scale-110 z-10" : "opacity-80"}`}
+            >
+              {cell && (
+                <span className="text-white font-bold text-xs">{cell}</span>
+              )}
+              {cursor[0] === r && cursor[1] === c && !cell && (
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+              )}
+            </div>
+          )),
+        )}
       </div>
     </div>
   );

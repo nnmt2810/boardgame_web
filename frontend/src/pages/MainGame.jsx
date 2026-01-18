@@ -1,11 +1,13 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Controller from "../components/Controller";
 import Caro5Game from "../components/games/Caro5Game";
 import Caro4Game from "../components/games/Caro4Game";
 import SnakeGame from "../components/games/SnakeGame";
 import TicTacToeGame from "../components/games/TicTacToeGame";
 import MemoryGame from "../components/games/MemoryGame";
+import SaveLoadModal from "../components/SaveLoadModal";
 import { HelpCircle } from "lucide-react";
+import axiosClient from '../api/axiosClient';
 
 const ROWS = 15;
 const COLS = 15;
@@ -55,6 +57,10 @@ const MainGame = () => {
   const [winner, setWinner] = useState(null);
   const [showHint, setShowHint] = useState(false);
   const gameRef = useRef(null);
+  const [saving, setSaving] = useState(false);
+
+  const [savedSession, setSavedSession] = useState(null);
+  const [showLoadModal, setShowLoadModal] = useState(false);
 
   const handleWinUpdate = (gameId, result) => {
     setWinner(result);
@@ -85,9 +91,7 @@ const MainGame = () => {
         case "ENTER":
           const game = GAMES_LIST.find((g) => g.pos[0] === r && g.pos[1] === c);
           if (game) {
-            setSelectedGame(game);
-            setView("IN_GAME");
-            resetGame();
+            selectGameWithLoadCheck(game);
           }
           break;
       }
@@ -98,9 +102,38 @@ const MainGame = () => {
         setSelectedGame(null);
         resetGame();
       } else if (gameRef.current) {
-        gameRef.current.handleCommand(cmd);
+        if (typeof gameRef.current.handleCommand === 'function') {
+          gameRef.current.handleCommand(cmd);
+        }
       }
     }
+  };
+
+  const selectGameWithLoadCheck = async (game) => {
+    try {
+      const res = await axiosClient.get(`/games/load/${game.id}`);
+      if (res?.data) {
+        setSavedSession(res.data);
+        setSelectedGame(game);
+        setShowLoadModal(true);
+        return;
+      }
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setSelectedGame(game);
+        setView("IN_GAME");
+        resetGame();
+        return;
+      }
+      console.error('Lỗi kiểm tra bản lưu:', err);
+      setSelectedGame(game);
+      setView("IN_GAME");
+      resetGame();
+      return;
+    }
+    setSelectedGame(game);
+    setView("IN_GAME");
+    resetGame();
   };
 
   const renderButton = (r, c) => {
@@ -126,12 +159,63 @@ const MainGame = () => {
 
   const hoverGame = GAMES_LIST.find((g) => g.pos[0] === cursor[0] && g.pos[1] === cursor[1]);
 
+  const saveIfNeeded = async () => {
+    if (!selectedGame) {
+      console.warn('No selected game to save');
+      return;
+    }
+    if (!gameRef.current || typeof gameRef.current.getState !== 'function') {
+      console.warn('Game component does not expose getState(), cannot save');
+      return;
+    }
+    try {
+      const state = await gameRef.current.getState();
+      if (winner) {
+        console.log('Game finished, skipping save');
+        return;
+      }
+      setSaving(true);
+      await axiosClient.post('/games/save', {
+        game_id: selectedGame.id,
+        matrix_state: state.matrix_state,
+        current_score: state.current_score ?? 0,
+        time_elapsed: state.time_elapsed ?? 0
+      });
+      console.log('Game saved');
+    } catch (err) {
+      console.error('Error saving game:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view === "IN_GAME" && savedSession && gameRef.current && typeof gameRef.current.loadState === 'function') {
+      try {
+        gameRef.current.loadState(savedSession);
+        setSavedSession(null);
+      } catch (err) {
+        console.error('Lỗi khi gọi loadState vào component game:', err);
+      }
+    }
+  }, [view, savedSession]);
+
+  const handleLoadFromModal = () => {
+    setShowLoadModal(false);
+    setView("IN_GAME");
+  };
+
+  const handleNewFromModal = () => {
+    setShowLoadModal(false);
+    setSavedSession(null);
+    setView("IN_GAME");
+    resetGame();
+  };
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-64px)] bg-gray-50/50">
-      {/* KHU VỰC CHƠI GAME VÀ ĐIỀU KHIỂN */}
       <div className="flex flex-col md:flex-row items-center md:items-start justify-center gap-12 p-6">
         <div className="flex flex-col items-center relative">
-          {/* KHUNG MÀN HÌNH CHÍNH */}
           <div className="relative bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
             {view === "MENU" ? (
               <div
@@ -162,7 +246,6 @@ const MainGame = () => {
               </div>
             )}
 
-            {/* Hướng dẫn chơi game*/}
             {showHint && (
               <div className="absolute inset-0 bg-black/90 z-50 flex items-center justify-center p-6 animate-in fade-in zoom-in duration-200">
                 <div className="bg-gray-900 border-2 border-yellow-500 p-6 rounded-2xl max-w-70 shadow-[0_0_30px_rgba(234,179,8,0.3)]">
@@ -222,11 +305,25 @@ const MainGame = () => {
               <div className="text-right pl-4">
                 <p className="text-gray-500 text-[10px] font-mono uppercase">Location</p>
                 <p className="font-mono text-sm font-bold text-indigo-300">{cursor[0]}:{cursor[1]}</p>
+
+                {view === "IN_GAME" && selectedGame && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => saveIfNeeded()}
+                      className="px-3 py-2 bg-yellow-400 text-black rounded-lg font-semibold"
+                      disabled={saving}
+                    >
+                      {saving ? 'Đang lưu...' : 'Save'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <SaveLoadModal isOpen={showLoadModal} onClose={() => setShowLoadModal(false)} onLoad={handleLoadFromModal} onNew={handleNewFromModal} />
     </div>
   );
 };

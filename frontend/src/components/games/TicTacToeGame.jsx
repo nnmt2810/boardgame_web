@@ -14,7 +14,7 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const [board, setBoard] = useState(
     Array(3)
       .fill()
-      .map(() => Array(3).fill(null))
+      .map(() => Array(3).fill(null)),
   );
   const [winner, setWinner] = useState(null);
   const [cursor, setCursor] = useState([7, 7]);
@@ -57,7 +57,7 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     currentBoard.forEach((row, r) =>
       row.forEach((cell, c) => {
         if (!cell) empty.push([r, c]);
-      })
+      }),
     );
     if (empty.length === 0) return;
     const [r, c] = empty[Math.floor(Math.random() * empty.length)];
@@ -103,6 +103,24 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       setCursor([r, c]);
       onCursorChange([r, c]);
     },
+    getState: async () => {
+      return {
+        matrix_state: board,
+        current_score: 0,
+        time_elapsed: 0,
+      };
+    },
+    loadState: (session) => {
+      try {
+        const parsed =
+          typeof session.matrix_state === "string"
+            ? JSON.parse(session.matrix_state)
+            : session.matrix_state;
+        if (parsed) setBoard(parsed);
+      } catch (err) {
+        console.error("Lỗi loadState TicTacToe:", err);
+      }
+    }
   }));
 
   const renderButton = (r, c) => {
@@ -119,8 +137,8 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         val === "X"
           ? "bg-green-500"
           : val === "O"
-          ? "bg-red-500"
-          : "bg-gray-700";
+            ? "bg-red-500"
+            : "bg-gray-700";
       if (val)
         content = <span className="text-white font-bold text-xs">{val}</span>;
     }
@@ -147,7 +165,7 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: ROWS }).map((_, r) =>
-          Array.from({ length: COLS }).map((_, c) => renderButton(r, c))
+          Array.from({ length: COLS }).map((_, c) => renderButton(r, c)),
         )}
       </div>
     </div>

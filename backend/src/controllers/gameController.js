@@ -1,22 +1,43 @@
 const db = require('../database/db');
 
+const resolveGameId = async (gameIdentifier) => {
+  if (!gameIdentifier && gameIdentifier !== 0) return null;
+  // Nếu là số có thể dùng trực tiếp
+  const numeric = parseInt(gameIdentifier, 10);
+  if (!Number.isNaN(numeric)) {
+    // kiểm tra tồn tại
+    const g = await db('games').where({ id: numeric }).first();
+    if (g) return numeric;
+  }
+  // Thử lookup bằng code
+  const gByCode = await db('games').where({ code: String(gameIdentifier) }).first();
+  if (gByCode) return gByCode.id;
+  return null;
+};
+
 // Lưu trạng thái game
 exports.saveSession = async (req, res) => {
   try {
     const { game_id, matrix_state, current_score, time_elapsed } = req.body;
     const user_id = req.user.id; // Lấy từ middleware verifyToken
 
+    const resolvedGameId = await resolveGameId(game_id);
+    if (!resolvedGameId) {
+      return res.status(400).json({ message: 'game_id không hợp lệ hoặc game không tồn tại' });
+    }
+
     const session = await db('game_sessions').insert({
       user_id,
-      game_id,
+      game_id: resolvedGameId,
       matrix_state: JSON.stringify(matrix_state), // Lưu ma trận dưới dạng JSON
-      current_score,
-      time_elapsed,
+      current_score: current_score ?? 0,
+      time_elapsed: time_elapsed ?? 0,
       status: 'saved'
     }).returning('*');
 
     res.status(201).json({ message: 'Đã lưu game!', session: session[0] });
   } catch (error) {
+    console.error('Error saveSession:', error);
     res.status(500).json({ message: 'Lỗi khi lưu game', error: error.message });
   }
 };
@@ -24,11 +45,16 @@ exports.saveSession = async (req, res) => {
 // Lấy bản lưu gần nhất
 exports.getLatestSession = async (req, res) => {
   try {
-    const { game_id } = req.params;
+    const gameParam = req.params.game_id;
     const user_id = req.user.id;
 
+    const resolvedGameId = await resolveGameId(gameParam);
+    if (!resolvedGameId) {
+      return res.status(404).json({ message: 'Game không tồn tại' });
+    }
+
     const session = await db('game_sessions')
-      .where({ user_id, game_id })
+      .where({ user_id, game_id: resolvedGameId })
       .orderBy('created_at', 'desc')
       .first();
 
@@ -36,6 +62,7 @@ exports.getLatestSession = async (req, res) => {
 
     res.json(session);
   } catch (error) {
+    console.error('Error getLatestSession:', error);
     res.status(500).json({ message: 'Lỗi khi tải game', error: error.message });
   }
 };
