@@ -92,3 +92,61 @@ exports.updatePlayerStats = async (req, res) => {
     res.status(500).json({ message: "Lỗi cập nhật thống kê", error: error.message });
   }
 };
+
+// Tìm kiếm người dùng theo username
+exports.searchUsers = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { q } = req.query; // Query string từ URL: /users/search?q=username
+    
+    if (!q || q.trim().length === 0) {
+      return res.json([]);
+    }
+
+    const searchTerm = `%${q.trim()}%`;
+    console.log('Search request:', { 
+      currentUserId, 
+      query: q, 
+      searchTerm 
+    });
+    
+    // Tìm kiếm users theo username (không bao gồm chính mình)
+    // Sử dụng whereRaw để đảm bảo tương thích với PostgreSQL
+    const users = await db('users')
+      .whereRaw('LOWER(username) LIKE LOWER(?)', [searchTerm])
+      .whereNot('id', currentUserId) // Không lấy chính mình
+      .select('id', 'username', 'email', 'created_at')
+      .limit(20); // Giới hạn 20 kết quả
+    
+    console.log('Found users:', users.length, users.map(u => ({ id: u.id, username: u.username })));
+    
+    // Kiểm tra trạng thái bạn bè cho mỗi user
+    const userIds = users.map(u => u.id);
+    const friendRelations = await db('friends')
+      .where(function() {
+        this.where('user_id', currentUserId).whereIn('friend_id', userIds);
+      })
+      .orWhere(function() {
+        this.where('friend_id', currentUserId).whereIn('user_id', userIds);
+      })
+      .select('user_id', 'friend_id', 'status');
+    
+    // Tạo map để tra cứu nhanh trạng thái bạn bè
+    const friendStatusMap = {};
+    friendRelations.forEach(rel => {
+      const friendId = rel.user_id === currentUserId ? rel.friend_id : rel.user_id;
+      friendStatusMap[friendId] = rel.status;
+    });
+    
+    // Thêm thông tin trạng thái bạn bè vào mỗi user
+    const usersWithStatus = users.map(user => ({
+      ...user,
+      friendStatus: friendStatusMap[user.id] || null // null = chưa kết bạn
+    }));
+    
+    res.json(usersWithStatus);
+  } catch (error) {
+    console.error('Error in searchUsers:', error);
+    res.status(500).json({ message: "Lỗi tìm kiếm người dùng", error: error.message });
+  }
+};
