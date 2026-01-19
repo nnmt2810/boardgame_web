@@ -6,6 +6,7 @@ const { verifyToken } = require('../middlewares/authMiddleware');
 router.post('/request', verifyToken, friendController.sendFriendRequest);
 router.post('/accept', verifyToken, friendController.acceptFriendRequest);
 router.get('/list', verifyToken, friendController.getFriendsList);
+router.get('/', verifyToken, friendController.getFriendsList);
 router.get('/pending', verifyToken, friendController.getPendingRequests);
 router.delete('/:friendId', verifyToken, friendController.removeFriend);
 
