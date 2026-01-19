@@ -1,16 +1,18 @@
-const db = require('../database/db');
+const db = require("../database/db");
 
 const resolveGameId = async (gameIdentifier) => {
   if (!gameIdentifier && gameIdentifier !== 0) return null;
   // Nếu là số có thể dùng trực tiếp
   const numeric = parseInt(gameIdentifier, 10);
   if (!Number.isNaN(numeric)) {
-    // kiểm tra tồn tại
-    const g = await db('games').where({ id: numeric }).first();
+    // Kiểm tra tồn tại
+    const g = await db("games").where({ id: numeric }).first();
     if (g) return numeric;
   }
   // Thử lookup bằng code
-  const gByCode = await db('games').where({ code: String(gameIdentifier) }).first();
+  const gByCode = await db("games")
+    .where({ code: String(gameIdentifier) })
+    .first();
   if (gByCode) return gByCode.id;
   return null;
 };
@@ -23,22 +25,26 @@ exports.saveSession = async (req, res) => {
 
     const resolvedGameId = await resolveGameId(game_id);
     if (!resolvedGameId) {
-      return res.status(400).json({ message: 'game_id không hợp lệ hoặc game không tồn tại' });
+      return res
+        .status(400)
+        .json({ message: "game_id không hợp lệ hoặc game không tồn tại" });
     }
 
-    const session = await db('game_sessions').insert({
-      user_id,
-      game_id: resolvedGameId,
-      matrix_state: JSON.stringify(matrix_state), // Lưu ma trận dưới dạng JSON
-      current_score: current_score ?? 0,
-      time_elapsed: time_elapsed ?? 0,
-      status: 'saved'
-    }).returning('*');
+    const session = await db("game_sessions")
+      .insert({
+        user_id,
+        game_id: resolvedGameId,
+        matrix_state: JSON.stringify(matrix_state), // Lưu ma trận dưới dạng JSON
+        current_score: current_score ?? 0,
+        time_elapsed: time_elapsed ?? 0,
+        status: "saved",
+      })
+      .returning("*");
 
-    res.status(201).json({ message: 'Đã lưu game!', session: session[0] });
+    res.status(201).json({ message: "Đã lưu game!", session: session[0] });
   } catch (error) {
-    console.error('Error saveSession:', error);
-    res.status(500).json({ message: 'Lỗi khi lưu game', error: error.message });
+    console.error("Error saveSession:", error);
+    res.status(500).json({ message: "Lỗi khi lưu game", error: error.message });
   }
 };
 
@@ -50,20 +56,21 @@ exports.getLatestSession = async (req, res) => {
 
     const resolvedGameId = await resolveGameId(gameParam);
     if (!resolvedGameId) {
-      return res.status(404).json({ message: 'Game không tồn tại' });
+      return res.status(404).json({ message: "Game không tồn tại" });
     }
 
-    const session = await db('game_sessions')
+    const session = await db("game_sessions")
       .where({ user_id, game_id: resolvedGameId })
-      .orderBy('created_at', 'desc')
+      .orderBy("created_at", "desc")
       .first();
 
-    if (!session) return res.status(404).json({ message: 'Không tìm thấy bản lưu' });
+    if (!session)
+      return res.status(404).json({ message: "Không tìm thấy bản lưu" });
 
     res.json(session);
   } catch (error) {
-    console.error('Error getLatestSession:', error);
-    res.status(500).json({ message: 'Lỗi khi tải game', error: error.message });
+    console.error("Error getLatestSession:", error);
+    res.status(500).json({ message: "Lỗi khi tải game", error: error.message });
   }
 };
 
@@ -72,16 +79,18 @@ exports.getLeaderboard = async (req, res) => {
   try {
     const { game_id } = req.params;
 
-    const leaderboard = await db('rankings')
-      .join('users', 'rankings.user_id', '=', 'users.id')
-      .select('users.username', 'rankings.high_score', 'rankings.updated_at')
-      .where('rankings.game_id', game_id)
-      .orderBy('rankings.high_score', 'desc')
+    const leaderboard = await db("rankings")
+      .join("users", "rankings.user_id", "=", "users.id")
+      .select("users.username", "rankings.high_score", "rankings.updated_at")
+      .where("rankings.game_id", game_id)
+      .orderBy("rankings.high_score", "desc")
       .limit(10);
 
     res.json(leaderboard);
   } catch (error) {
-    res.status(500).json({ message: 'Lỗi lấy bảng xếp hạng', error: error.message });
+    res
+      .status(500)
+      .json({ message: "Lỗi lấy bảng xếp hạng", error: error.message });
   }
 };
 
@@ -91,21 +100,25 @@ exports.updateScore = async (req, res) => {
     const { game_id, score } = req.body;
     const user_id = req.user.id;
 
-    const existing = await db('rankings').where({ user_id, game_id }).first();
+    const existing = await db("rankings").where({ user_id, game_id }).first();
 
     if (!existing) {
-      await db('rankings').insert({ user_id, game_id, high_score: score });
+      await db("rankings").insert({ user_id, game_id, high_score: score });
     } else if (score > existing.high_score) {
       // Chỉ cập nhật nếu điểm mới cao hơn điểm cũ
-      await db('rankings').where({ user_id, game_id }).update({ 
-        high_score: score,
-        updated_at: db.raw('NOW()') 
-      });
+      await db("rankings")
+        .where({ user_id, game_id })
+        .update({
+          high_score: score,
+          updated_at: db.raw("NOW()"),
+        });
     }
 
-    res.json({ message: 'Cập nhật điểm thành công' });
+    res.json({ message: "Cập nhật điểm thành công" });
   } catch (error) {
-    res.status(500).json({ message: 'Lỗi cập nhật điểm', error: error.message });
+    res
+      .status(500)
+      .json({ message: "Lỗi cập nhật điểm", error: error.message });
   }
 };
 
@@ -116,25 +129,29 @@ exports.getFriendLeaderboard = async (req, res) => {
     const user_id = req.user.id;
 
     // Lấy danh sách ID của bạn bè
-    const friends = await db('friends')
-      .where(function() {
-        this.where('user_id', user_id).orWhere('friend_id', user_id);
+    const friends = await db("friends")
+      .where(function () {
+        this.where("user_id", user_id).orWhere("friend_id", user_id);
       })
-      .andWhere('status', 'accepted');
+      .andWhere("status", "accepted");
 
-    const friendIds = friends.map(f => f.user_id === user_id ? f.friend_id : f.user_id);
+    const friendIds = friends.map((f) =>
+      f.user_id === user_id ? f.friend_id : f.user_id,
+    );
     friendIds.push(user_id); // Bao gồm cả chính mình trong bảng xếp hạng bạn bè
 
     // Lấy ranking của những ID này
-    const leaderboard = await db('rankings')
-      .join('users', 'rankings.user_id', '=', 'users.id')
-      .select('users.username', 'rankings.high_score')
-      .where('rankings.game_id', game_id)
-      .whereIn('rankings.user_id', friendIds)
-      .orderBy('rankings.high_score', 'desc');
+    const leaderboard = await db("rankings")
+      .join("users", "rankings.user_id", "=", "users.id")
+      .select("users.username", "rankings.high_score")
+      .where("rankings.game_id", game_id)
+      .whereIn("rankings.user_id", friendIds)
+      .orderBy("rankings.high_score", "desc");
 
     res.json(leaderboard);
   } catch (error) {
-    res.status(500).json({ message: 'Lỗi lấy ranking bạn bè', error: error.message });
+    res
+      .status(500)
+      .json({ message: "Lỗi lấy ranking bạn bè", error: error.message });
   }
 };

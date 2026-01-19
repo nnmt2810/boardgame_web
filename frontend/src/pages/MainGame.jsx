@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useContext } from "react";
 import Controller from "../components/Controller";
 import Caro5Game from "../components/games/Caro5Game";
 import Caro4Game from "../components/games/Caro4Game";
@@ -7,7 +7,8 @@ import TicTacToeGame from "../components/games/TicTacToeGame";
 import MemoryGame from "../components/games/MemoryGame";
 import SaveLoadModal from "../components/SaveLoadModal";
 import { HelpCircle } from "lucide-react";
-import axiosClient from '../api/axiosClient';
+import { AuthContext } from "../contexts/AuthContext";
+import { saveToLocal, loadFromLocal, deleteLocal } from "../utils/localSaves";
 
 const ROWS = 15;
 const COLS = 15;
@@ -27,12 +28,12 @@ const GAMES_LIST = [
     pos: [3, 7],
     hint: "Xếp đủ 4 quân cờ cùng hàng (ngang, dọc, chéo) để thắng. AI sẽ chặn bạn rất kỹ đấy!",
   },
-  { 
-    id: "tictactoe", 
-    name: "TIC-TAC-TOE", 
-    color: "bg-green-500", 
+  {
+    id: "tictactoe",
+    name: "TIC-TAC-TOE",
+    color: "bg-green-500",
     pos: [3, 11],
-    hint: "Trò chơi 3x3 kinh điển. Hãy tạo một hàng ngang, dọc hoặc chéo gồm 3 quân X trước AI. Nếu cả hai cùng đánh đúng, kết quả thường là Hòa!" 
+    hint: "Trò chơi 3x3 kinh điển. Hãy tạo một hàng ngang, dọc hoặc chéo gồm 3 quân X trước AI. Nếu cả hai cùng đánh đúng, kết quả thường là Hòa!",
   },
   {
     id: "snake",
@@ -41,16 +42,18 @@ const GAMES_LIST = [
     pos: [7, 3],
     hint: "Dùng các nút điều hướng để ăn mồi. Đâm vào tường hoặc thân mình sẽ thua. Điểm cao nhất sẽ được lưu!",
   },
-  { 
-    id: "memory", 
-    name: "CỜ TRÍ NHỚ", 
-    color: "bg-yellow-500", 
+  {
+    id: "memory",
+    name: "CỜ TRÍ NHỚ",
+    color: "bg-yellow-500",
     pos: [7, 7],
-    hint: "Lật các thẻ bài để tìm cặp hình giống nhau. Bạn cần ghi nhớ vị trí các thẻ đã lật. Trò chơi kết thúc khi bạn tìm được tất cả các cặp bài trùng khớp!" 
-  }
+    hint: "Lật các thẻ bài để tìm cặp hình giống nhau. Bạn cần ghi nhớ vị trí các thẻ đã lật. Trò chơi kết thúc khi bạn tìm được tất cả các cặp bài trùng khớp!",
+  },
 ];
 
 const MainGame = () => {
+  const { user } = useContext(AuthContext);
+  const userId = user?.id;
   const [cursor, setCursor] = useState([3, 3]);
   const [view, setView] = useState("MENU");
   const [selectedGame, setSelectedGame] = useState(null);
@@ -58,12 +61,20 @@ const MainGame = () => {
   const [showHint, setShowHint] = useState(false);
   const gameRef = useRef(null);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [savedSession, setSavedSession] = useState(null);
   const [showLoadModal, setShowLoadModal] = useState(false);
+  const [loadedFromSession, setLoadedFromSession] = useState(false);
 
-  const handleWinUpdate = (gameId, result) => {
+  const handleWinUpdate = async (gameId, result) => {
     setWinner(result);
+    if (result && loadedFromSession && selectedGame) {
+      deleteLocal(userId, selectedGame.id);
+      setSavedSession(null);
+      setLoadedFromSession(false);
+      console.log("Deleted local saved session for", selectedGame.id);
+    }
   };
 
   const resetGame = () => {
@@ -75,24 +86,28 @@ const MainGame = () => {
       setShowHint((prev) => !prev);
       return;
     }
-
     if (showHint) {
       if (cmd === "BACK") setShowHint(false);
       return;
     }
-
     if (view === "MENU") {
       let [r, c] = cursor;
       switch (cmd) {
-        case "UP": if (r > 0) r--; break;
-        case "DOWN": if (r < ROWS - 1) r++; break;
-        case "LEFT": if (c > 0) c--; break;
-        case "RIGHT": if (c < COLS - 1) c++; break;
+        case "UP":
+          if (r > 0) r--;
+          break;
+        case "DOWN":
+          if (r < ROWS - 1) r++;
+          break;
+        case "LEFT":
+          if (c > 0) c--;
+          break;
+        case "RIGHT":
+          if (c < COLS - 1) c++;
+          break;
         case "ENTER":
           const game = GAMES_LIST.find((g) => g.pos[0] === r && g.pos[1] === c);
-          if (game) {
-            selectGameWithLoadCheck(game);
-          }
+          if (game) selectGameWithLoadCheck(game);
           break;
       }
       setCursor([r, c]);
@@ -101,34 +116,22 @@ const MainGame = () => {
         setView("MENU");
         setSelectedGame(null);
         resetGame();
+        setSavedSession(null);
+        setLoadedFromSession(false);
       } else if (gameRef.current) {
-        if (typeof gameRef.current.handleCommand === 'function') {
+        if (typeof gameRef.current.handleCommand === "function") {
           gameRef.current.handleCommand(cmd);
         }
       }
     }
   };
 
-  const selectGameWithLoadCheck = async (game) => {
-    try {
-      const res = await axiosClient.get(`/games/load/${game.id}`);
-      if (res?.data) {
-        setSavedSession(res.data);
-        setSelectedGame(game);
-        setShowLoadModal(true);
-        return;
-      }
-    } catch (err) {
-      if (err.response?.status === 404) {
-        setSelectedGame(game);
-        setView("IN_GAME");
-        resetGame();
-        return;
-      }
-      console.error('Lỗi kiểm tra bản lưu:', err);
+  const selectGameWithLoadCheck = (game) => {
+    const local = loadFromLocal(userId, game.id);
+    if (local) {
+      setSavedSession(local);
       setSelectedGame(game);
-      setView("IN_GAME");
-      resetGame();
+      setShowLoadModal(true);
       return;
     }
     setSelectedGame(game);
@@ -140,7 +143,6 @@ const MainGame = () => {
     const isCursor = cursor[0] === r && cursor[1] === c;
     const gameTarget = GAMES_LIST.find((g) => g.pos[0] === r && g.pos[1] === c);
     let colorClass = gameTarget ? gameTarget.color : "bg-gray-800";
-
     return (
       <div
         key={`${r}-${c}`}
@@ -157,50 +159,54 @@ const MainGame = () => {
     );
   };
 
-  const hoverGame = GAMES_LIST.find((g) => g.pos[0] === cursor[0] && g.pos[1] === cursor[1]);
+  const hoverGame = GAMES_LIST.find(
+    (g) => g.pos[0] === cursor[0] && g.pos[1] === cursor[1],
+  );
 
   const saveIfNeeded = async () => {
-    if (!selectedGame) {
-      console.warn('No selected game to save');
+    if (!selectedGame) return;
+    if (!gameRef.current || typeof gameRef.current.getState !== "function")
       return;
-    }
-    if (!gameRef.current || typeof gameRef.current.getState !== 'function') {
-      console.warn('Game component does not expose getState(), cannot save');
-      return;
-    }
     try {
       const state = await gameRef.current.getState();
-      if (winner) {
-        console.log('Game finished, skipping save');
-        return;
-      }
+      if (winner) return;
       setSaving(true);
-      await axiosClient.post('/games/save', {
-        game_id: selectedGame.id,
+      const session = {
         matrix_state: state.matrix_state,
         current_score: state.current_score ?? 0,
-        time_elapsed: state.time_elapsed ?? 0
-      });
-      console.log('Game saved');
+        time_elapsed: state.time_elapsed ?? 0,
+        created_at: Date.now(),
+      };
+      const ok = saveToLocal(userId, selectedGame.id, session);
+      if (ok) {
+        setSavedSession(session);
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 1400);
+      }
     } catch (err) {
-      console.error('Error saving game:', err);
+      console.error("Error saving game to localStorage:", err);
     } finally {
       setSaving(false);
     }
   };
 
   useEffect(() => {
-    if (view === "IN_GAME" && savedSession && gameRef.current && typeof gameRef.current.loadState === 'function') {
+    if (
+      view === "IN_GAME" &&
+      savedSession &&
+      gameRef.current &&
+      typeof gameRef.current.loadState === "function"
+    ) {
       try {
         gameRef.current.loadState(savedSession);
-        setSavedSession(null);
       } catch (err) {
-        console.error('Lỗi khi gọi loadState vào component game:', err);
+        console.error("Error calling loadState on game component:", err);
       }
     }
   }, [view, savedSession]);
 
   const handleLoadFromModal = () => {
+    if (savedSession) setLoadedFromSession(true);
     setShowLoadModal(false);
     setView("IN_GAME");
   };
@@ -208,6 +214,7 @@ const MainGame = () => {
   const handleNewFromModal = () => {
     setShowLoadModal(false);
     setSavedSession(null);
+    setLoadedFromSession(false);
     setView("IN_GAME");
     resetGame();
   };
@@ -220,28 +227,52 @@ const MainGame = () => {
             {view === "MENU" ? (
               <div
                 className="grid gap-1.5"
-                style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
+                style={{
+                  gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
+                }}
               >
                 {Array.from({ length: ROWS }).map((_, r) =>
-                  Array.from({ length: COLS }).map((_, c) => renderButton(r, c))
+                  Array.from({ length: COLS }).map((_, c) =>
+                    renderButton(r, c),
+                  ),
                 )}
               </div>
             ) : (
               <div className="relative">
                 {selectedGame?.id === "caro5" && (
-                  <Caro5Game ref={gameRef} onWinnerChange={(res) => handleWinUpdate("caro5", res)} onCursorChange={setCursor} />
+                  <Caro5Game
+                    ref={gameRef}
+                    onWinnerChange={(res) => handleWinUpdate("caro5", res)}
+                    onCursorChange={setCursor}
+                  />
                 )}
                 {selectedGame?.id === "caro4" && (
-                  <Caro4Game ref={gameRef} onWinnerChange={(res) => handleWinUpdate("caro4", res)} onCursorChange={setCursor} />
+                  <Caro4Game
+                    ref={gameRef}
+                    onWinnerChange={(res) => handleWinUpdate("caro4", res)}
+                    onCursorChange={setCursor}
+                  />
                 )}
                 {selectedGame?.id === "snake" && (
-                  <SnakeGame ref={gameRef} onWinnerChange={(res) => handleWinUpdate("snake", res)} onCursorChange={setCursor} />
+                  <SnakeGame
+                    ref={gameRef}
+                    onWinnerChange={(res) => handleWinUpdate("snake", res)}
+                    onCursorChange={setCursor}
+                  />
                 )}
                 {selectedGame?.id === "tictactoe" && (
-                  <TicTacToeGame ref={gameRef} onWinnerChange={(res) => handleWinUpdate("tictactoe", res)} onCursorChange={setCursor} />
+                  <TicTacToeGame
+                    ref={gameRef}
+                    onWinnerChange={(res) => handleWinUpdate("tictactoe", res)}
+                    onCursorChange={setCursor}
+                  />
                 )}
                 {selectedGame?.id === "memory" && (
-                  <MemoryGame ref={gameRef} onWinnerChange={(res) => handleWinUpdate("memory", res)} onCursorChange={setCursor} />
+                  <MemoryGame
+                    ref={gameRef}
+                    onWinnerChange={(res) => handleWinUpdate("memory", res)}
+                    onCursorChange={setCursor}
+                  />
                 )}
               </div>
             )}
@@ -252,24 +283,34 @@ const MainGame = () => {
                   <div className="flex items-center gap-2 mb-4">
                     <HelpCircle className="text-yellow-500" size={24} />
                     <h3 className="text-yellow-500 font-black text-lg uppercase tracking-tighter">
-                      {view === "MENU" ? (hoverGame ? hoverGame.name : "Hệ thống") : selectedGame?.name}
+                      {view === "MENU"
+                        ? hoverGame
+                          ? hoverGame.name
+                          : "Hệ thống"
+                        : selectedGame?.name}
                     </h3>
                   </div>
-                  
+
                   <p className="text-gray-300 text-xs leading-relaxed mb-6 italic">
-                    {view === "MENU" 
-                      ? (hoverGame ? hoverGame.hint : "Sử dụng phím điều hướng để chọn game, nhấn ENTER để chơi.") 
+                    {view === "MENU"
+                      ? hoverGame
+                        ? hoverGame.hint
+                        : "Sử dụng phím điều hướng để chọn game, nhấn ENTER để chơi."
                       : selectedGame?.hint}
                   </p>
 
                   <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                      <p className="text-[10px] text-yellow-500/50 font-bold uppercase mb-1">Mục tiêu thắng</p>
-                      <p className="text-white text-[11px] font-medium">
-                        {selectedGame?.id === "snake" ? "Ghi điểm càng cao càng tốt để lưu kỷ lục!" : "Đánh bại AI hoặc hoàn thành thử thách trước!"}
-                      </p>
+                    <p className="text-[10px] text-yellow-500/50 font-bold uppercase mb-1">
+                      Mục tiêu thắng
+                    </p>
+                    <p className="text-white text-[11px] font-medium">
+                      {selectedGame?.id === "snake"
+                        ? "Ghi điểm càng cao càng tốt để lưu kỷ lục!"
+                        : "Đánh bại AI hoặc hoàn thành thử thách trước!"}
+                    </p>
                   </div>
 
-                  <button 
+                  <button
                     onClick={() => setShowHint(false)}
                     className="mt-6 w-full py-2 bg-yellow-500 text-black font-black text-[10px] rounded-lg uppercase transition-all active:scale-95"
                   >
@@ -291,29 +332,63 @@ const MainGame = () => {
                   {showHint ? "Viewing_Hint" : "System_Status"}
                 </p>
                 <h2 className="text-xl font-black uppercase tracking-tighter truncate">
-                  {view === "MENU" ? (hoverGame?.name || "IDLE MODE") : selectedGame?.name}
+                  {view === "MENU"
+                    ? hoverGame?.name || "IDLE MODE"
+                    : selectedGame?.name}
                 </h2>
 
                 {winner && (
                   <div className="mt-3 py-2 px-3 bg-white/5 rounded-lg border border-white/10">
                     <p className="text-yellow-400 text-sm font-black animate-pulse uppercase flex items-center gap-2">
-                      {winner === "LOSE" ? "💀 GAME OVER" : winner === "DRAW" ? "🤝 DRAW GAME!" : "🏆 GAME WIN!"}
+                      {winner === "LOSE"
+                        ? "💀 GAME OVER"
+                        : winner === "DRAW"
+                          ? "🤝 DRAW GAME!"
+                          : "🏆 GAME WIN!"}
                     </p>
                   </div>
                 )}
               </div>
+
               <div className="text-right pl-4">
-                <p className="text-gray-500 text-[10px] font-mono uppercase">Location</p>
-                <p className="font-mono text-sm font-bold text-indigo-300">{cursor[0]}:{cursor[1]}</p>
+                <p className="text-gray-500 text-[10px] font-mono uppercase">
+                  Location
+                </p>
+                <p className="font-mono text-sm font-bold text-indigo-300">
+                  {cursor[0]}:{cursor[1]}
+                </p>
 
                 {view === "IN_GAME" && selectedGame && (
                   <div className="mt-3">
                     <button
                       onClick={() => saveIfNeeded()}
-                      className="px-3 py-2 bg-yellow-400 text-black rounded-lg font-semibold"
                       disabled={saving}
+                      className={`px-3 py-2 rounded-lg font-semibold transform transition-all duration-200 inline-flex items-center justify-center gap-2 ${
+                        saving
+                          ? "bg-yellow-300 text-black scale-95 opacity-90"
+                          : saveSuccess
+                            ? "bg-green-500 text-white shadow-lg scale-105"
+                            : "bg-yellow-400 text-black hover:scale-105 hover:shadow-xl active:scale-95"
+                      }`}
                     >
-                      {saving ? 'Đang lưu...' : 'Save'}
+                      {saving && (
+                        <span className="w-4 h-4 border-2 border-t-transparent border-black rounded-full animate-spin" />
+                      )}
+                      {!saving && saveSuccess && (
+                        <svg
+                          className="w-4 h-4 text-white"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      )}
+                      {!saving && !saveSuccess && <span>Save</span>}
+                      {!saving && saveSuccess && <span>Saved</span>}
                     </button>
                   </div>
                 )}
@@ -323,7 +398,12 @@ const MainGame = () => {
         </div>
       </div>
 
-      <SaveLoadModal isOpen={showLoadModal} onClose={() => setShowLoadModal(false)} onLoad={handleLoadFromModal} onNew={handleNewFromModal} />
+      <SaveLoadModal
+        isOpen={showLoadModal}
+        onClose={() => setShowLoadModal(false)}
+        onLoad={handleLoadFromModal}
+        onNew={handleNewFromModal}
+      />
     </div>
   );
 };
