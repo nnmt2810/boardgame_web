@@ -27,27 +27,49 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const [score, setScore] = useState(0);
   const [hasReported, setHasReported] = useState(false);
 
-  // 1. Chỉ gọi API khi Game Over
+  // Hàm gửi điểm lên backend
   const reportScore = useCallback(
     async (finalScore) => {
-      if (!user || hasReported || finalScore === 0) return;
-
+      if (!user || hasReported || finalScore <= 0) return;
       try {
-        setHasReported(true); // Đánh dấu đã gửi ngay lập tức
-        await axiosClient.post("/users/stats/update", {
-          stat_type: "snake_score",
-          value: finalScore,
-        });
+        setHasReported(true);
+        try {
+          await axiosClient.post("/users/stats/update", {
+            stat_type: "snake_score",
+            value: finalScore,
+          });
+        } catch (err) {
+          console.warn("Cập nhật stats user thất bại:", err);
+        }
+
+        // Cập nhật bảng xếp hạng cho game snake
+        try {
+          await axiosClient.post("/games/update-score", {
+            game_id: "snake",
+            score: finalScore,
+          });
+        } catch (err) {
+          console.warn("Cập nhật ranking thất bại (games/update-score):", err);
+        }
+
+        try {
+          window.dispatchEvent(
+            new CustomEvent("leaderboard:refresh", { detail: { gameId: "snake" } })
+          );
+        } catch (err) {
+          console.warn("Không thể dispatch leaderboard:refresh:", err);
+        }
+
         console.log("✓ Điểm Snake đã được cập nhật:", finalScore);
       } catch (error) {
         console.error("Lỗi cập nhật điểm Snake:", error);
-        setHasReported(false); // Reset nếu lỗi để có thể thử lại
+        setHasReported(false);
       }
     },
     [user, hasReported],
   );
 
-  // 2. Tách biệt việc theo dõi Game Over để gửi điểm (Tránh lỗi Side Effect trong render)
+  // Tách biệt việc theo dõi Game Over để gửi điểm
   useEffect(() => {
     if (isGameOver && score > 0 && !hasReported) {
       reportScore(score);

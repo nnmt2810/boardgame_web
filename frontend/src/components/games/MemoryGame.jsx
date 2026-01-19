@@ -42,13 +42,33 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
 
     try {
       setHasReported(true);
+
       await axiosClient.post("/users/stats/update", {
         stat_type: "win",
         value: 1,
       });
+
+      try {
+        await axiosClient.post("/games/update-score", {
+          game_id: "memory",
+          win: true,
+        });
+      } catch (err) {
+        console.warn("Cập nhật ranking thất bại (games/update-score):", err);
+      }
+
       console.log("✓ Kết quả Memory đã được cập nhật");
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent("leaderboard:refresh", { detail: { gameId: "memory" } })
+        );
+      } catch (err) {
+        console.warn("Không thể dispatch leaderboard:refresh:", err);
+      }
     } catch (error) {
       console.error("Lỗi cập nhật Memory:", error);
+      setHasReported(false);
     }
   };
 

@@ -20,14 +20,37 @@ const Caro4Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const reportWin = async () => {
     if (!user || hasReported) return;
     try {
+      // Ngăn gửi nhiều lần
       setHasReported(true);
+
       await axiosClient.post("http://localhost:5000/api/users/stats/update", {
         stat_type: "win",
         value: 1,
       });
+
+      try {
+        await axiosClient.post("/games/update-score", {
+          game_id: "caro4",
+          win: true,
+        });
+      } catch (err) {
+        console.warn("Cập nhật ranking thất bại (games/update-score):", err);
+      }
+
       console.log("✓ Trận thắng Caro 4 đã được cập nhật");
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent("leaderboard:refresh", {
+            detail: { gameId: "caro4" },
+          }),
+        );
+      } catch (err) {
+        console.warn("Không thể dispatch leaderboard:refresh:", err);
+      }
     } catch (error) {
       console.error("Lỗi cập nhật trận thắng Caro 4:", error);
+      setHasReported(false);
     }
   };
 

@@ -42,13 +42,38 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
 
     try {
       setHasReported(true);
-      await axiosClient.post("/users/stats/update", {
-        stat_type: "win",
-        value: 1,
-      });
+
+      try {
+        await axiosClient.post("/users/stats/update", {
+          stat_type: "win",
+          value: 1,
+        });
+      } catch (err) {
+        console.warn("Cập nhật stats user thất bại:", err);
+      }
+
+      // Cập nhật bảng xếp hạng game
+      try {
+        await axiosClient.post("/games/update-score", {
+          game_id: "tictactoe",
+          win: true,
+        });
+      } catch (err) {
+        console.warn("Cập nhật ranking thất bại (games/update-score):", err);
+      }
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent("leaderboard:refresh", { detail: { gameId: "tictactoe" } })
+        );
+      } catch (err) {
+        console.warn("Không thể dispatch leaderboard:refresh:", err);
+      }
+
       console.log("✓ Trận thắng Tic Tac Toe đã được cập nhật");
     } catch (error) {
       console.error("Lỗi cập nhật trận thắng:", error);
+      setHasReported(false);
     }
   };
 

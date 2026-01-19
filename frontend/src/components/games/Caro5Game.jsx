@@ -15,18 +15,39 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const [winner, setWinner] = useState(null);
   const [cursor, setCursor] = useState([7, 7]);
   const [hasReported, setHasReported] = useState(false);
-
+  
+  // Hàm báo cáo chiến thắng về Backend
   const reportWin = async () => {
     if (!user || hasReported) return;
     try {
       setHasReported(true);
+
       await axiosClient.post("/users/stats/update", {
         stat_type: "win",
         value: 1,
       });
+
+      try {
+        await axiosClient.post("/games/update-score", {
+          game_id: "caro5",
+          win: true,
+        });
+      } catch (err) {
+        console.warn("Cập nhật ranking thất bại (games/update-score):", err);
+      }
+
       console.log("✓ Trận thắng Caro 5 đã được cập nhật");
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent("leaderboard:refresh", { detail: { gameId: "caro5" } })
+        );
+      } catch (err) {
+        console.warn("Không thể dispatch leaderboard:refresh:", err);
+      }
     } catch (error) {
       console.error("Lỗi cập nhật trận thắng Caro 5:", error);
+      setHasReported(false);
     }
   };
 
@@ -90,7 +111,7 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         if (win) {
           setWinner(win);
           onWinnerChange(win);
-          if (win === "X") reportWin();
+          if (win === "X") reportWin(); // Người chơi thắng => gọi handler để cập nhật
         } else {
           setTimeout(() => aiMove(newBoard), 300);
         }
@@ -113,6 +134,7 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
             : session.matrix_state;
         if (parsed) setBoard(parsed);
         if (session.current_score != null) {
+          // giữ chỗ nếu bạn muốn tải điểm hiện tại từ session
         }
       } catch (err) {
         console.error("Lỗi loadState Caro5:", err);

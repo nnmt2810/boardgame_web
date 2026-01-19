@@ -9,6 +9,7 @@ import SaveLoadModal from "../components/SaveLoadModal";
 import { HelpCircle } from "lucide-react";
 import { AuthContext } from "../contexts/AuthContext";
 import { saveToLocal, loadFromLocal, deleteLocal } from "../utils/localSaves";
+import LeaderboardPanel from "../components/LeaderboardPanel";
 
 const ROWS = 15;
 const COLS = 15;
@@ -394,6 +395,12 @@ const MainGame = () => {
                 )}
               </div>
             </div>
+            
+            {/* Leaderboard */}
+            <div className="mt-4">
+              <LeaderboardPanel gameId={selectedGame?.id ?? null} compact={true} />
+            </div>
+
           </div>
         </div>
       </div>
