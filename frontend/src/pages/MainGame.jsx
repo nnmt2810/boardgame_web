@@ -5,6 +5,8 @@ import Caro4Game from "../components/games/Caro4Game";
 import SnakeGame from "../components/games/SnakeGame";
 import TicTacToeGame from "../components/games/TicTacToeGame";
 import MemoryGame from "../components/games/MemoryGame";
+import Match3Game from "../components/games/Match3Game";
+import DrawingGame from "../components/games/DrawingGame";
 import SaveLoadModal from "../components/SaveLoadModal";
 import { HelpCircle } from "lucide-react";
 import { AuthContext } from "../contexts/AuthContext";
@@ -49,6 +51,20 @@ const GAMES_LIST = [
     color: "bg-yellow-500",
     pos: [7, 7],
     hint: "Lật các thẻ bài để tìm cặp hình giống nhau. Bạn cần ghi nhớ vị trí các thẻ đã lật. Trò chơi kết thúc khi bạn tìm được tất cả các cặp bài trùng khớp!",
+  },
+  {
+    id: "match3",
+    name: "GHÉP HÀNG 3",
+    color: "bg-pink-500",
+    pos: [7, 11],
+    hint: "Ghép thành hàng 3 trở lên để ghi điểm. ENTER để chọn/hoán đổi ô kề nhau. BACK để thoát và ghi điểm.",
+  },
+  {
+    id: "drawing",
+    name: "BẢNG VẼ",
+    color: "bg-gray-500",
+    pos: [11, 7],
+    hint: "Bảng vẽ tự do: vẽ, undo, clear và lưu bản vẽ của bạn. Không tính điểm.",
   },
 ];
 
@@ -303,6 +319,20 @@ const MainGame = () => {
           <MemoryGame
             ref={gameRef}
             onWinnerChange={(res) => handleWinUpdate("memory", res)}
+            onCursorChange={setCursor}
+          />
+        )}
+        {selectedGame?.id === "match3" && (
+          <Match3Game
+            ref={gameRef}
+            onWinnerChange={(res) => handleWinUpdate("match3", res)}
+            onCursorChange={setCursor}
+          />
+        )}
+        {selectedGame?.id === "drawing" && (
+          <DrawingGame
+            ref={gameRef}
+            onWinnerChange={(res) => handleWinUpdate("drawing", res)}
             onCursorChange={setCursor}
           />
         )}
