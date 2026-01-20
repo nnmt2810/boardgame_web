@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 
 exports.seed = async function(knex) {
   // Đảm bảo users đã được tạo
-  const users = await knex('users').select('id');
+  const users = await knex('users').select('id', 'username');
   if (users.length === 0) {
     console.log('Vui lòng chạy seed_users trước!');
     return;
@@ -31,18 +31,37 @@ exports.seed = async function(knex) {
     console.log(`✅ Đã tạo ${friendData.length} mối quan hệ bạn bè`);
   }
 
-  // Seed Rankings - ít nhất 3 rankings cho mỗi game
+  // Seed Rankings - xử lý khác cho snake & match3 (lưu high_score), bỏ qua drawing,
+  // các game khác lưu total_wins
   await knex('rankings').del();
-  const games = await knex('games').select('id');
-  
+  const games = await knex('games').select('id', 'code');
+
   for (const game of games) {
-    for (let i = 0; i < Math.min(3, regularUserIds.length); i++) {
-      await knex('rankings').insert({
+    // Skip if no regular users
+    const count = Math.min(3, regularUserIds.length);
+    for (let i = 0; i < count; i++) {
+      const base = {
         user_id: regularUserIds[i],
         game_id: game.id,
-        high_score: Math.floor(Math.random() * 1000) + 100,
-        total_wins: Math.floor(Math.random() * 10) + 1
-      });
+      };
+
+      if (game.code === 'snake' || game.code === 'match3') {
+        // Score-based games -> high_score
+        await knex('rankings').insert({
+          ...base,
+          high_score: Math.floor(Math.random() * 1000) + 50,
+          total_wins: 0
+        });
+      } else if (game.code === 'drawing') {
+        continue;
+      } else {
+        // Win-based games -> total_wins
+        await knex('rankings').insert({
+          ...base,
+          high_score: 0,
+          total_wins: Math.floor(Math.random() * 10) + 1
+        });
+      }
     }
   }
 
@@ -90,4 +109,3 @@ exports.seed = async function(knex) {
   console.log(`   - Messages: ${await knex('messages').count('id as total').then(r => r[0].total)}`);
   console.log(`   - Sessions: ${await knex('game_sessions').count('id as total').then(r => r[0].total)}`);
 };
-
