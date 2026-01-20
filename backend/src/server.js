@@ -1,5 +1,8 @@
 require('dotenv').config();
 const express = require('express');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const gameRoutes = require('./routes/gameRoutes');
@@ -35,6 +38,19 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server đang chạy tại cổng: ${PORT}`);
-});
+
+// Thiết lập HTTPS
+if (process.env.USE_HTTPS === 'true') {
+  const httpsOptions = {
+    key: fs.readFileSync(path.join(__dirname, '../ssl/key.pem')),
+    cert: fs.readFileSync(path.join(__dirname, '../ssl/cert.pem'))
+  };
+
+  https.createServer(httpsOptions, app).listen(PORT, () => {
+    console.log(`🔒 HTTPS Server đang chạy tại: https://localhost:${PORT}`);
+  });
+} else {
+  app.listen(PORT, () => {
+    console.log(`Server đang chạy tại cổng: ${PORT}`);
+  });
+}

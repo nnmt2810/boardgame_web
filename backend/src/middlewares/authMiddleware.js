@@ -26,4 +26,19 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { verifyToken, isAdmin };
+// Kiểm tra API Key
+const verifyApiKey = (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+
+  if (!apiKey) {
+    return res.status(401).json({ message: 'API Key được yêu cầu' });
+  }
+
+  if (apiKey !== process.env.API_KEY) {
+    return res.status(403).json({ message: 'API Key không hợp lệ' });
+  }
+
+  next();
+};
+
+module.exports = { verifyToken, isAdmin, verifyApiKey };

@@ -3,6 +3,16 @@ node_modules/
 
 # Environment variables
 .env
+apikey.txt
+
+# SSL certificates
+backend/ssl/
+frontend/ssl/
+ssl/
+*.pem
+*.key
+*.crt
+*.cert
 
 # Debug logs
 npm-debug.log*
