@@ -68,6 +68,9 @@ const MainGame = () => {
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [loadedFromSession, setLoadedFromSession] = useState(false);
 
+  // Thông báo tạm thời khi game bị đóng bảo trì
+  const [maintenanceNotice, setMaintenanceNotice] = useState(null);
+
   const handleWinUpdate = async (gameId, result) => {
     setWinner(result);
     if (result && loadedFromSession && selectedGame) {
@@ -113,6 +116,13 @@ const MainGame = () => {
       }
       setCursor([r, c]);
     } else if (view === "IN_GAME") {
+      // Nếu game đang đóng bảo trì thì chặn mọi lệnh điều khiển
+      if (selectedGame && selectedGame.is_active === false) {
+        setMaintenanceNotice(`"${selectedGame.name}" đang được đóng để bảo trì. Không thể chơi hiện tại.`);
+        setTimeout(() => setMaintenanceNotice(null), 4000);
+        return;
+      }
+
       if (cmd === "BACK") {
         setView("MENU");
         setSelectedGame(null);
@@ -127,7 +137,17 @@ const MainGame = () => {
     }
   };
 
+  // Khi chọn game: nếu đã có session lưu local => hỏi load; nếu game disabled => show notice & không vào IN_GAME
   const selectGameWithLoadCheck = (game) => {
+    // Nếu game bị đóng (is_active === false) -> không cho vào chế độ chơi, show thông báo
+    if (game && game.is_active === false) {
+      setSelectedGame(game);
+      setView("MENU");
+      setMaintenanceNotice(`"${game.name}" đang được đóng để bảo trì.`);
+      setTimeout(() => setMaintenanceNotice(null), 4000);
+      return;
+    }
+
     const local = loadFromLocal(userId, game.id);
     if (local) {
       setSavedSession(local);
@@ -143,7 +163,13 @@ const MainGame = () => {
   const renderButton = (r, c) => {
     const isCursor = cursor[0] === r && cursor[1] === c;
     const gameTarget = GAMES_LIST.find((g) => g.pos[0] === r && g.pos[1] === c);
-    let colorClass = gameTarget ? gameTarget.color : "bg-gray-800";
+    // Nếu gameTarget có is_active === false thì hiển thị kiểu disabled
+    let colorClass = gameTarget
+      ? gameTarget.is_active === false
+        ? "bg-gray-600" // màu tối cho disabled
+        : gameTarget.color
+      : "bg-gray-800";
+
     return (
       <div
         key={`${r}-${c}`}
@@ -155,6 +181,10 @@ const MainGame = () => {
       >
         {isCursor && (
           <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+        )}
+        {/* Nếu là ô game và game disabled */}
+        {gameTarget && gameTarget.is_active === false && (
+          <div className="absolute text-[9px] text-white font-bold mt-6">{/* reserved for badge if needed */}</div>
         )}
       </div>
     );
@@ -168,6 +198,12 @@ const MainGame = () => {
     if (!selectedGame) return;
     if (!gameRef.current || typeof gameRef.current.getState !== "function")
       return;
+    // Nếu game đang bị disable, không cho save (không cần)
+    if (selectedGame && selectedGame.is_active === false) {
+      setMaintenanceNotice(`"${selectedGame.name}" đang được đóng để bảo trì. Không thể lưu.`);
+      setTimeout(() => setMaintenanceNotice(null), 3000);
+      return;
+    }
     try {
       const state = await gameRef.current.getState();
       if (winner) return;
@@ -220,6 +256,60 @@ const MainGame = () => {
     resetGame();
   };
 
+  // Khi render game area, nếu selectedGame.is_active === false thì hiển thị thông báo bảo trì thay vì mount component
+  const renderGameArea = () => {
+    if (!selectedGame) return null;
+
+    if (selectedGame.is_active === false) {
+      return (
+        <div className="p-6 bg-yellow-50 rounded-lg border border-yellow-200 text-yellow-900">
+          <p className="font-semibold">Game: {selectedGame.name}</p>
+          <p className="mt-2">Trò chơi hiện đang đóng để bảo trì. Vui lòng thử lại sau.</p>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {selectedGame?.id === "caro5" && (
+          <Caro5Game
+            ref={gameRef}
+            onWinnerChange={(res) => handleWinUpdate("caro5", res)}
+            onCursorChange={setCursor}
+          />
+        )}
+        {selectedGame?.id === "caro4" && (
+          <Caro4Game
+            ref={gameRef}
+            onWinnerChange={(res) => handleWinUpdate("caro4", res)}
+            onCursorChange={setCursor}
+          />
+        )}
+        {selectedGame?.id === "snake" && (
+          <SnakeGame
+            ref={gameRef}
+            onWinnerChange={(res) => handleWinUpdate("snake", res)}
+            onCursorChange={setCursor}
+          />
+        )}
+        {selectedGame?.id === "tictactoe" && (
+          <TicTacToeGame
+            ref={gameRef}
+            onWinnerChange={(res) => handleWinUpdate("tictactoe", res)}
+            onCursorChange={setCursor}
+          />
+        )}
+        {selectedGame?.id === "memory" && (
+          <MemoryGame
+            ref={gameRef}
+            onWinnerChange={(res) => handleWinUpdate("memory", res)}
+            onCursorChange={setCursor}
+          />
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-64px)] bg-gray-50/50">
       <div className="flex flex-col md:flex-row items-center md:items-start justify-center gap-12 p-6">
@@ -240,41 +330,7 @@ const MainGame = () => {
               </div>
             ) : (
               <div className="relative">
-                {selectedGame?.id === "caro5" && (
-                  <Caro5Game
-                    ref={gameRef}
-                    onWinnerChange={(res) => handleWinUpdate("caro5", res)}
-                    onCursorChange={setCursor}
-                  />
-                )}
-                {selectedGame?.id === "caro4" && (
-                  <Caro4Game
-                    ref={gameRef}
-                    onWinnerChange={(res) => handleWinUpdate("caro4", res)}
-                    onCursorChange={setCursor}
-                  />
-                )}
-                {selectedGame?.id === "snake" && (
-                  <SnakeGame
-                    ref={gameRef}
-                    onWinnerChange={(res) => handleWinUpdate("snake", res)}
-                    onCursorChange={setCursor}
-                  />
-                )}
-                {selectedGame?.id === "tictactoe" && (
-                  <TicTacToeGame
-                    ref={gameRef}
-                    onWinnerChange={(res) => handleWinUpdate("tictactoe", res)}
-                    onCursorChange={setCursor}
-                  />
-                )}
-                {selectedGame?.id === "memory" && (
-                  <MemoryGame
-                    ref={gameRef}
-                    onWinnerChange={(res) => handleWinUpdate("memory", res)}
-                    onCursorChange={setCursor}
-                  />
-                )}
+                {renderGameArea()}
               </div>
             )}
 
@@ -305,9 +361,13 @@ const MainGame = () => {
                       Mục tiêu thắng
                     </p>
                     <p className="text-white text-[11px] font-medium">
-                      {selectedGame?.id === "snake"
-                        ? "Ghi điểm càng cao càng tốt để lưu kỷ lục!"
-                        : "Đánh bại AI hoặc hoàn thành thử thách trước!"}
+                      {view === "MENU"
+                        ? hoverGame
+                          ? (hoverGame.id === "snake"
+                              ? "Ghi điểm càng cao càng tốt để lưu kỷ lục!"
+                              : "Đánh bại AI hoặc hoàn thành thử thách trước!")
+                          : "Sử dụng phím điều hướng để chơi."
+                        : selectedGame?.hint}
                     </p>
                   </div>
 
@@ -363,7 +423,7 @@ const MainGame = () => {
                   <div className="mt-3">
                     <button
                       onClick={() => saveIfNeeded()}
-                      disabled={saving}
+                      disabled={saving || (selectedGame && selectedGame.is_active === false)}
                       className={`px-3 py-2 rounded-lg font-semibold transform transition-all duration-200 inline-flex items-center justify-center gap-2 ${
                         saving
                           ? "bg-yellow-300 text-black scale-95 opacity-90"
@@ -411,6 +471,13 @@ const MainGame = () => {
         onLoad={handleLoadFromModal}
         onNew={handleNewFromModal}
       />
+
+      {/* Maintenance toast */}
+      {maintenanceNotice && (
+        <div className="fixed bottom-6 right-6 bg-yellow-100 border border-yellow-300 text-yellow-900 px-4 py-3 rounded shadow">
+          {maintenanceNotice}
+        </div>
+      )}
     </div>
   );
 };

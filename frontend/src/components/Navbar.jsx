@@ -85,6 +85,15 @@ const Navbar = () => {
                     <User size={16} />
                     <span>Profile</span>
                   </Link>
+                  {user?.role === "admin" && (
+                        <Link
+                          to="/admin"
+                          className="block px-3 py-2 rounded text-sm font-semibold text-yellow-300 hover:bg-white/3"
+                          onClick={() => setOpen(false)}
+                        >
+                          Admin Dashboard
+                        </Link>
+                      )}
                 </div>
               )}
             </div>

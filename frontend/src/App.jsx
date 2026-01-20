@@ -14,6 +14,7 @@ import Footer from "./components/Footer";
 import Profile from "./pages/Profile";
 import Friends from "./pages/Friends";
 import MessagesPage from "./pages/Messages";
+import AdminDashboard from "./pages/AdminDashboard";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
@@ -72,6 +73,15 @@ function App() {
               element={
                 <ProtectedRoute>
                   <MessagesPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminDashboard />
                 </ProtectedRoute>
               }
             />
