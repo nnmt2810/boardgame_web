@@ -4,9 +4,10 @@ import {
   useImperativeHandle,
   forwardRef,
   useContext,
-} from "react"; // Thêm useContext ở đây
+} from "react";
 import { AuthContext } from "../../contexts/AuthContext";
 import axiosClient from "../../api/axiosClient";
+import useGameTimer from "../../hooks/useGameTimer";
 
 const ROWS = 15;
 const COLS = 15;
@@ -28,25 +29,35 @@ const COLORS = [
 ];
 
 const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
-  const { user } = useContext(AuthContext);
+  const { user, setUser } = useContext(AuthContext);
   const [grid, setGrid] = useState([]);
   const [flipped, setFlipped] = useState([]);
   const [solved, setSolved] = useState([]); // Các ô đã tìm đúng cặp
   const [cursor, setCursor] = useState([5, 5]);
   const [isLock, setIsLock] = useState(false); // Khóa khi đang đợi lật úp
   const [hasReported, setHasReported] = useState(false);
+  const [winner, setWinner] = useState(null);
+  const { timeElapsed, isRunning, start, pause, reset, load, formatTime } = useGameTimer();
 
   // Hàm gửi kết quả thắng lên backend
   const reportWin = async () => {
     if (!user || hasReported) return;
 
+    setHasReported(true);
     try {
-      setHasReported(true);
-
-      await axiosClient.post("/users/stats/update", {
+      const resp = await axiosClient.post("/users/stats/update", {
         stat_type: "win",
         value: 1,
+        game_code: "memory",
       });
+
+      if (resp?.data?.user && typeof setUser === "function") {
+        try {
+          setUser(resp.data.user);
+        } catch (err) {
+          console.warn("Không thể setUser từ response:", err);
+        }
+      }
 
       try {
         await axiosClient.post("/games/update-score", {
@@ -57,8 +68,6 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         console.warn("Cập nhật ranking thất bại (games/update-score):", err);
       }
 
-      console.log("✓ Kết quả Memory đã được cập nhật");
-
       try {
         window.dispatchEvent(
           new CustomEvent("leaderboard:refresh", { detail: { gameId: "memory" } })
@@ -66,6 +75,8 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       } catch (err) {
         console.warn("Không thể dispatch leaderboard:refresh:", err);
       }
+
+      console.log("✓ Kết quả Memory đã được cập nhật");
     } catch (error) {
       console.error("Lỗi cập nhật Memory:", error);
       setHasReported(false);
@@ -85,11 +96,34 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       }
     }
     setGrid(newGrid);
-  }, []);
+    setFlipped([]);
+    setSolved([]);
+    setWinner(null);
+    setHasReported(false);
+    reset();
+  }, [reset]);
+
+  // Khi winner thay đổi: gọi parent, pause timer, báo backend
+  useEffect(() => {
+    if (!winner) return;
+
+    try {
+      onWinnerChange && onWinnerChange(winner);
+    } catch (err) {
+      console.warn("onWinnerChange error:", err);
+    }
+
+    // Dừng khi game kết thúc
+    pause();
+
+    if (winner === "X") {
+      reportWin();
+    }
+  }, [winner]);
 
   useImperativeHandle(ref, () => ({
     handleCommand: (cmd) => {
-      if (isLock) return;
+      if (isLock || winner) return;
       let [r, c] = cursor;
       if (cmd === "UP" && r > START_R) r--;
       if (cmd === "DOWN" && r < END_R) r++;
@@ -102,36 +136,41 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         const cellKey = `${localR}-${localC}`;
 
         // Kiểm tra nếu ô đã mở hoặc đã giải xong thì bỏ qua
-        if (flipped.includes(cellKey) || solved.includes(cellKey)) return;
+        if (flipped.includes(cellKey) || solved.includes(cellKey)) {
+          // không làm gì
+        } else {
+          const newFlipped = [...flipped, cellKey];
+          setFlipped(newFlipped);
 
-        const newFlipped = [...flipped, cellKey];
-        setFlipped(newFlipped);
+          // Bắt đầu timer ở nước đi đầu tiên
+          if (!isRunning && timeElapsed === 0) start();
 
-        if (newFlipped.length === 2) {
-          setIsLock(true);
-          const [firstR, firstC] = newFlipped[0].split("-").map(Number);
-          const [secondR, secondC] = newFlipped[1].split("-").map(Number);
+          if (newFlipped.length === 2) {
+            setIsLock(true);
+            const [firstR, firstC] = newFlipped[0].split("-").map(Number);
+            const [secondR, secondC] = newFlipped[1].split("-").map(Number);
 
-          if (grid[firstR][firstC] === grid[secondR][secondC]) {
-            // Khớp màu
-            setSolved([...solved, newFlipped[0], newFlipped[1]]);
-            setFlipped([]);
-            setIsLock(false);
-
-            // Kiểm tra thắng cuộc
-            if (solved.length + 2 === 16) {
-              onWinnerChange("X");
-              reportWin();
-            }
-          } else {
-            // Không khớp -> Đợi 1s rồi úp lại
-            setTimeout(() => {
+            if (grid[firstR][firstC] === grid[secondR][secondC]) {
+              // Khớp màu
+              const newSolved = [...solved, newFlipped[0], newFlipped[1]];
+              setSolved(newSolved);
               setFlipped([]);
               setIsLock(false);
-            }, 800);
+
+              // Kiểm tra thắng cuộc dựa trên newSolved
+              if (newSolved.length === 16) {
+                setWinner("X");
+              }
+            } else {
+              setTimeout(() => {
+                setFlipped([]);
+                setIsLock(false);
+              }, 800);
+            }
           }
         }
       }
+
       setCursor([r, c]);
       onCursorChange([r, c]);
     },
@@ -139,7 +178,7 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       return {
         matrix_state: { grid, flipped, solved },
         current_score: 0,
-        time_elapsed: 0,
+        time_elapsed: timeElapsed,
       };
     },
     loadState: (session) => {
@@ -151,10 +190,23 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         if (parsed?.grid) setGrid(parsed.grid);
         if (parsed?.flipped) setFlipped(parsed.flipped);
         if (parsed?.solved) setSolved(parsed.solved);
+        if (session.time_elapsed != null) {
+          load(Number(session.time_elapsed) || 0, false);
+        }
       } catch (err) {
         console.error("Lỗi loadState Memory:", err);
       }
-    }
+    },
+    startTimer: () => start(),
+    pauseTimer: () => pause(),
+    resetTimer: () => {
+      reset();
+      setFlipped([]);
+      setSolved([]);
+      setWinner(null);
+      setHasReported(false);
+    },
+    getTime: () => timeElapsed,
   }));
 
   const renderButton = (r, c) => {
@@ -191,12 +243,17 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
 
   return (
     <div className="bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+      <div className="mb-3 text-xs text-gray-300">
+        Time: {formatTime ? formatTime(timeElapsed) : (timeElapsed / 1000).toFixed(1)}{" "}
+        {isRunning ? "(running)" : winner ? "(stopped)" : "(paused)"}
+      </div>
+
       <div
         className="grid gap-1.5"
         style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: ROWS }).map((_, r) =>
-          Array.from({ length: COLS }).map((_, c) => renderButton(r, c)),
+          Array.from({ length: COLS }).map((_, c) => renderButton(r, c))
         )}
       </div>
     </div>

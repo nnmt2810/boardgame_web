@@ -1,30 +1,11 @@
 import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useContext } from "react";
 import axiosClient from "../../api/axiosClient";
 import { AuthContext } from "../../contexts/AuthContext";
-
-/**
- * Match3Game (Ghép hàng 3, simple)
- *
- * - Grid 8x8, nhiều màu (COLORS)
- * - Dùng keyboard để điều khiển:
- *    UP/DOWN/LEFT/RIGHT di chuyển con trỏ
- *    ENTER: chọn/hoán đổi ô (select / swap)
- *    BACK: thoát (khi thoát nếu score>0 sẽ gửi reportScore)
- * - Exposed methods via ref:
- *    handleCommand(cmd), getState(), loadState(session)
- * - getState trả về { matrix_state, current_score, time_elapsed }
- * - loadState chấp nhận matrix_state từ save
- *
- * - Khi người chơi thoát (BACK), component sẽ gửi điểm cuối lên backend:
- *    POST /games/update-score { game_id: "match3", score }
- *   và dispatch event 'leaderboard:refresh' để làm mới leaderboard.
- *
- * Đây là game bản mẫu, logic là đủ để chơi cơ bản (swap, match, collapse, refill).
- */
+import useGameTimer from "../../hooks/useGameTimer";
 
 const ROWS = 8;
 const COLS = 8;
-const COLORS = ["red","blue","green","yellow","purple","orange"]; // có thể map tới class tailwind nếu cần
+const COLORS = ["red","blue","green","yellow","purple","orange"];
 
 const getRandomTile = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
@@ -33,7 +14,6 @@ const createGrid = () => {
   return g;
 };
 
-// Helper: deep clone grid
 const cloneGrid = (g) => g.map(row => [...row]);
 
 const areAdjacent = (a, b) => {
@@ -52,22 +32,24 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const [hasReported, setHasReported] = useState(false);
 
   const resolveTimeoutRef = useRef(null);
+  const { timeElapsed, isRunning, start, pause, reset, load, formatTime } = useGameTimer();
 
-  // Report final score to backend when leaving/explicit call
+  // Report điểm về backend
   const reportScore = async (finalScore) => {
     if (!user || hasReported || !finalScore || finalScore <= 0) return;
     try {
       setHasReported(true);
-      // Try update user stats (optional)
+      // Cập nhật user stats
       try {
         await axiosClient.post("/users/stats/update", {
           stat_type: "match3_score",
           value: finalScore,
+          game_code: "match3",
         });
       } catch (e) {
         // ignore
       }
-      // Update ranking (score-based game)
+      // Cập nhật ranking
       try {
         await axiosClient.post("/games/update-score", {
           game_id: "match3",
@@ -76,7 +58,7 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       } catch (e) {
         console.warn("Cập nhật ranking match3 thất bại", e);
       }
-      // Dispatch event to refresh leaderboard
+      // Kích hoạt refresh bảng xếp hạng toàn cục
       try {
         window.dispatchEvent(new CustomEvent("leaderboard:refresh", { detail: { gameId: "match3" } }));
       } catch (e) {}
@@ -87,7 +69,7 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     }
   };
 
-  // Find all matches (>=3) and return array of positions to remove
+  // Tìm tất cả các ô khớp (hàng/ cột >=3)
   const findMatches = (g) => {
     const remove = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
     // horizontal
@@ -123,7 +105,6 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     return positions;
   };
 
-  // Collapse columns after removal and refill top with random tiles
   const collapseAndRefill = (g) => {
     for (let c = 0; c < COLS; c++) {
       let write = ROWS - 1;
@@ -139,7 +120,7 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     }
   };
 
-  // Run a single resolve cycle: find matches, remove them, update score, collapse/refill. Repeat until no matches.
+  // Chạy vòng lặp tìm & xử lý khớp liên tục
   const resolveMatchesCycle = async (startGrid) => {
     setIsResolving(true);
     let g = cloneGrid(startGrid);
@@ -148,15 +129,12 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       const matches = findMatches(g);
       if (!matches.length) break;
       totalRemoved += matches.length;
-      // remove
+      // xóa ô khớp
       for (const [r,c] of matches) g[r][c] = null;
-      // score: e.g., 10 points per tile (can scale)
+      // điểm số
       setScore(prev => prev + matches.length * 10);
-      // collapse & refill
+      // collapse and refill
       collapseAndRefill(g);
-      // small delay to show effect (non-blocking)
-      // We await a timeout to allow UI update
-      // eslint-disable-next-line no-await-in-loop
       await new Promise(res => setTimeout(res, 180));
     }
     setGrid(g);
@@ -164,7 +142,7 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     return totalRemoved;
   };
 
-  // Swap two tiles and resolve
+  // Di chuyển 2 ô và xử lý khớp
   const swapAndResolve = async (a, b) => {
     if (!areAdjacent(a,b)) return false;
     const g = cloneGrid(grid);
@@ -172,10 +150,9 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     g[a[0]][a[1]] = g[b[0]][b[1]];
     g[b[0]][b[1]] = tmp;
     setGrid(g);
-    // check if swap produces any match; if not, swap back
+    // kiểm tra khớp
     const matches = findMatches(g);
     if (matches.length === 0) {
-      // revert after short delay to show swap
       await new Promise(res => setTimeout(res, 120));
       const revert = cloneGrid(g);
       revert[a[0]][a[1]] = revert[b[0]][b[1]];
@@ -183,17 +160,21 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       setGrid(revert);
       return false;
     }
-    // else resolve until no more matches
     await resolveMatchesCycle(g);
     return true;
   };
 
-  // handle keyboard commands
   useImperativeHandle(ref, () => ({
     handleCommand: (cmd) => {
       if (isResolving) return;
+
+      if (cmd !== "BACK" && !isRunning && timeElapsed === 0) {
+        start();
+      }
+
       if (cmd === "BACK") {
-        // call onWinnerChange? For match3 we treat exit as finalize: report score
+        // Tạm dừng đồng hồ và gọi onWinnerChange
+        pause();
         if (typeof onWinnerChange === "function") onWinnerChange("EXIT");
         reportScore(score);
         return;
@@ -201,25 +182,25 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       if (cmd === "UP") {
         setCursor(([r,c]) => {
           const nr = Math.max(0, r-1);
-          onCursorChange && onCursorChange([nr, c]);
+          setTimeout(() => { onCursorChange && onCursorChange([nr, c]); }, 0);
           return [nr,c];
         });
       } else if (cmd === "DOWN") {
         setCursor(([r,c]) => {
           const nr = Math.min(ROWS-1, r+1);
-          onCursorChange && onCursorChange([nr, c]);
+          setTimeout(() => { onCursorChange && onCursorChange([nr, c]); }, 0);
           return [nr,c];
         });
       } else if (cmd === "LEFT") {
         setCursor(([r,c]) => {
           const nc = Math.max(0, c-1);
-          onCursorChange && onCursorChange([r, nc]);
+          setTimeout(() => { onCursorChange && onCursorChange([r, nc]); }, 0);
           return [r,nc];
         });
       } else if (cmd === "RIGHT") {
         setCursor(([r,c]) => {
           const nc = Math.min(COLS-1, c+1);
-          onCursorChange && onCursorChange([r, nc]);
+          setTimeout(() => { onCursorChange && onCursorChange([r, nc]); }, 0);
           return [r,nc];
         });
       } else if (cmd === "ENTER") {
@@ -227,14 +208,13 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         if (!selected) {
           setSelected(cur);
         } else {
-          // try swap if adjacent
-          const success = (async () => {
+          (async () => {
             const a = selected;
             const b = cur;
             setSelected(null);
             const swapped = await swapAndResolve(a, b);
             if (!swapped) {
-              // maybe provide feedback
+              // không khớp, không làm gì thêm
             }
           })();
         }
@@ -244,7 +224,7 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       return {
         matrix_state: { grid, cursor, selected },
         current_score: score,
-        time_elapsed: 0,
+        time_elapsed: timeElapsed,
       };
     },
     loadState: (session) => {
@@ -254,23 +234,22 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         if (parsed?.cursor) setCursor(parsed.cursor);
         if (parsed?.selected) setSelected(parsed.selected);
         if (typeof session.current_score === "number") setScore(session.current_score);
+        if (session.time_elapsed != null) {
+          load(Number(session.time_elapsed) || 0, false);
+        }
       } catch (err) {
         console.error("Lỗi loadState Match3:", err);
       }
     }
-  }), [grid, cursor, selected, score, isResolving, user]);
+  }), [grid, cursor, selected, score, isResolving, user, isRunning, timeElapsed, start, pause, load]);
 
   useEffect(() => {
-    // auto-resolve initial accidental matches on mount
-    // small timeout to allow mount
     resolveTimeoutRef.current = setTimeout(() => {
       resolveMatchesCycle(grid);
     }, 80);
     return () => clearTimeout(resolveTimeoutRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Render tile with color
   const tileStyle = (color) => {
     const base = "w-8 h-8 sm:w-10 sm:h-10 rounded-md flex items-center justify-center text-xs font-bold";
     const colorClass = {
@@ -288,7 +267,10 @@ const Match3Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     <div className="p-3">
       <div className="mb-2 flex items-center justify-between">
         <div className="font-bold text-sm">Ghép hàng 3</div>
-        <div className="text-xs text-gray-300 font-mono">Score: {score}</div>
+        <div className="flex items-center gap-4">
+          <div className="text-xs text-gray-300 font-mono">Score: {score}</div>
+          <div className="text-xs text-gray-300 font-mono">Time: {formatTime ? formatTime(timeElapsed) : (timeElapsed/1000).toFixed(1)} {isRunning ? "(running)" : "(paused)"}</div>
+        </div>
       </div>
 
       <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${COLS}, min-content)` }}>

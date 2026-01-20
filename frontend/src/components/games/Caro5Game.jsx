@@ -1,12 +1,13 @@
-import { useState, useImperativeHandle, forwardRef, useContext } from "react";
+import { useState, useImperativeHandle, forwardRef, useContext, useEffect } from "react";
 import { AuthContext } from "../../contexts/AuthContext";
 import axiosClient from "../../api/axiosClient";
+import useGameTimer from "../../hooks/useGameTimer";
 
 const ROWS = 15;
 const COLS = 15;
 
 const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
-  const { user } = useContext(AuthContext);
+  const { user, setUser } = useContext(AuthContext);
   const [board, setBoard] = useState(
     Array(ROWS)
       .fill()
@@ -15,18 +16,30 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const [winner, setWinner] = useState(null);
   const [cursor, setCursor] = useState([7, 7]);
   const [hasReported, setHasReported] = useState(false);
-  
-  // Hàm báo cáo chiến thắng về Backend
+  const { timeElapsed, isRunning, start, pause, reset, load } = useGameTimer();
+
+  // Hàm báo cáo chiến thắng về Backend và cập nhật profile trong AuthContext
   const reportWin = async () => {
     if (!user || hasReported) return;
+    setHasReported(true);
     try {
-      setHasReported(true);
-
-      await axiosClient.post("/users/stats/update", {
+      // Cập nhật thống kê user
+      const statResp = await axiosClient.post("/users/stats/update", {
         stat_type: "win",
         value: 1,
+        game_code: "caro5",
       });
 
+      // Nếu backend trả updated user, cập nhật AuthContext ngay
+      if (statResp?.data?.user) {
+        try {
+          setUser(statResp.data.user);
+        } catch (err) {
+          console.warn("Không thể setUser từ response:", err);
+        }
+      }
+
+      // Cập nhật bảng xếp hạng (win-based)
       try {
         await axiosClient.post("/games/update-score", {
           game_id: "caro5",
@@ -35,9 +48,6 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       } catch (err) {
         console.warn("Cập nhật ranking thất bại (games/update-score):", err);
       }
-
-      console.log("✓ Trận thắng Caro 5 đã được cập nhật");
-
       try {
         window.dispatchEvent(
           new CustomEvent("leaderboard:refresh", { detail: { gameId: "caro5" } })
@@ -45,6 +55,7 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       } catch (err) {
         console.warn("Không thể dispatch leaderboard:refresh:", err);
       }
+      console.log("✓ Trận thắng Caro 5 đã được cập nhật");
     } catch (error) {
       console.error("Lỗi cập nhật trận thắng Caro 5:", error);
       setHasReported(false);
@@ -89,10 +100,27 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     setBoard(newBoard);
     const win = checkWinner(newBoard, r, c);
     if (win) {
+      // chỉ set winner; useEffect sẽ xử lý onWinnerChange/report
       setWinner(win);
-      onWinnerChange(win);
     }
   };
+
+  useEffect(() => {
+    if (!winner) return;
+
+    try {
+      onWinnerChange && onWinnerChange(winner);
+    } catch (err) {
+      console.warn("onWinnerChange error:", err);
+    }
+
+    pause();
+
+    // Nếu người chơi là X thắng thì report
+    if (winner === "X") {
+      reportWin();
+    }
+  }, [winner]);
 
   useImperativeHandle(ref, () => ({
     handleCommand: (cmd) => {
@@ -107,25 +135,41 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         const newBoard = board.map((row) => [...row]);
         newBoard[r][c] = "X";
         setBoard(newBoard);
+
+        // Bắt đầu tính giờ khi đi bước đầu tiên
+        if (!isRunning && timeElapsed === 0) {
+          start();
+        }
+
         const win = checkWinner(newBoard, r, c);
         if (win) {
           setWinner(win);
-          onWinnerChange(win);
-          if (win === "X") reportWin(); // Người chơi thắng => gọi handler để cập nhật
+          if (win === "X") {
+
+          }
         } else {
           setTimeout(() => aiMove(newBoard), 300);
         }
       }
+
+      if (cmd === "BACK") {
+        pause();
+      }
+
       setCursor([r, c]);
       onCursorChange([r, c]);
     },
+
+    // getState trả về board và time_elapsed
     getState: async () => {
       return {
         matrix_state: board,
         current_score: 0,
-        time_elapsed: 0,
+        time_elapsed: timeElapsed,
       };
     },
+
+    // Loadstate từ session, bao gồm board và time_elapsed
     loadState: (session) => {
       try {
         const parsed =
@@ -134,16 +178,24 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
             : session.matrix_state;
         if (parsed) setBoard(parsed);
         if (session.current_score != null) {
-          // giữ chỗ nếu bạn muốn tải điểm hiện tại từ session
+        }
+        if (session.time_elapsed != null) {
+          load(Number(session.time_elapsed) || 0, false);
         }
       } catch (err) {
         console.error("Lỗi loadState Caro5:", err);
       }
-    }
+    },
+
+    startTimer: () => start(),
+    pauseTimer: () => pause(),
+    resetTimer: () => reset(),
+    getTime: () => timeElapsed,
   }));
 
   return (
     <div className="bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+      <div className="mb-3 text-xs text-gray-300">Time: {(timeElapsed / 1000).toFixed(1)}s</div>
       <div
         className="grid gap-1"
         style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}

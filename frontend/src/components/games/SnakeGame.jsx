@@ -8,6 +8,7 @@ import {
 } from "react";
 import { AuthContext } from "../../contexts/AuthContext";
 import axiosClient from "../../api/axiosClient";
+import useGameTimer from "../../hooks/useGameTimer";
 
 const ROWS = 15;
 const COLS = 15;
@@ -19,30 +20,35 @@ const INITIAL_SNAKE = [
 const INITIAL_DIR = "LEFT";
 
 const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
-  const { user } = useContext(AuthContext);
+  const { user, setUser } = useContext(AuthContext);
   const [snake, setSnake] = useState(INITIAL_SNAKE);
   const [dir, setDir] = useState(INITIAL_DIR);
   const [food, setFood] = useState([3, 3]);
   const [isGameOver, setIsGameOver] = useState(false);
   const [score, setScore] = useState(0);
   const [hasReported, setHasReported] = useState(false);
+  const { timeElapsed, isRunning, start, pause, reset, load, formatTime } = useGameTimer();
 
-  // Hàm gửi điểm lên backend
+  // Report điểm về backend
   const reportScore = useCallback(
     async (finalScore) => {
       if (!user || hasReported || finalScore <= 0) return;
+      setHasReported(true);
       try {
-        setHasReported(true);
-        try {
-          await axiosClient.post("/users/stats/update", {
-            stat_type: "snake_score",
-            value: finalScore,
-          });
-        } catch (err) {
-          console.warn("Cập nhật stats user thất bại:", err);
+        const resp = await axiosClient.post("/users/stats/update", {
+          stat_type: "snake_score",
+          value: finalScore,
+          game_code: "snake",
+        });
+
+        if (resp?.data?.user && typeof setUser === "function") {
+          try {
+            setUser(resp.data.user);
+          } catch (err) {
+            console.warn("Không thể setUser từ response:", err);
+          }
         }
 
-        // Cập nhật bảng xếp hạng cho game snake
         try {
           await axiosClient.post("/games/update-score", {
             game_id: "snake",
@@ -66,10 +72,28 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         setHasReported(false);
       }
     },
-    [user, hasReported],
+    [user, hasReported, setUser],
   );
 
-  // Tách biệt việc theo dõi Game Over để gửi điểm
+  useEffect(() => {
+    if (!isGameOver) return;
+
+    // Tạm dừng timer
+    pause();
+
+    try {
+      onWinnerChange && onWinnerChange("LOSE");
+    } catch (e) {
+      console.warn("onWinnerChange error:", e);
+    }
+
+    // Report khi điểm > 0
+    if (score > 0) {
+      reportScore(score);
+    }
+  }, [isGameOver]);
+
+  // Đảm bảo chỉ report 1 lần khi game over
   useEffect(() => {
     if (isGameOver && score > 0 && !hasReported) {
       reportScore(score);
@@ -96,6 +120,8 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const moveSnake = useCallback(() => {
     if (isGameOver) return;
 
+    let newHeadLocal = null;
+
     setSnake((prevSnake) => {
       const head = prevSnake[0];
       const newHead = [...head];
@@ -104,6 +130,8 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       if (dir === "DOWN") newHead[0]++;
       if (dir === "LEFT") newHead[1]--;
       if (dir === "RIGHT") newHead[1]++;
+
+      newHeadLocal = newHead;
 
       // Kiểm tra va chạm
       if (
@@ -114,13 +142,11 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         prevSnake.some((seg) => seg[0] === newHead[0] && seg[1] === newHead[1])
       ) {
         setIsGameOver(true);
-        onWinnerChange("LOSE");
         return prevSnake;
       }
 
       const newSnake = [newHead, ...prevSnake];
 
-      // Ăn mồi
       if (newHead[0] === food[0] && newHead[1] === food[1]) {
         setScore((s) => s + 1);
         generateFood(newSnake);
@@ -128,10 +154,24 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
         newSnake.pop();
       }
 
-      onCursorChange(newHead);
       return newSnake;
     });
-  }, [dir, food, isGameOver, generateFood, onWinnerChange, onCursorChange]);
+
+    if (newHeadLocal && typeof onCursorChange === "function") {
+      setTimeout(() => {
+        try {
+          onCursorChange(newHeadLocal);
+        } catch (e) {
+          console.warn("onCursorChange error:", e);
+        }
+      }, 0);
+    }
+
+    // Bắt đầu timer khi di chuyển lần đầu
+    if (!isRunning && timeElapsed === 0) {
+      start();
+    }
+  }, [dir, food, isGameOver, generateFood, isRunning, timeElapsed, start, onCursorChange]);
 
   useEffect(() => {
     const interval = setInterval(moveSnake, 230);
@@ -140,20 +180,26 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
 
   useImperativeHandle(ref, () => ({
     handleCommand: (cmd) => {
-      // Logic Reset thủ công khi nhấn ENTER sau khi chết
+      // Reset on ENTER after death
       if (isGameOver && cmd === "ENTER") {
         setSnake(INITIAL_SNAKE);
         setDir(INITIAL_DIR);
         setIsGameOver(false);
         setScore(0);
-        setHasReported(false); // Reset flag cho ván mới
+        setHasReported(false);
+        reset();
         return;
       }
       if (isGameOver) return;
+
       if (cmd === "UP" && dir !== "DOWN") setDir("UP");
       if (cmd === "DOWN" && dir !== "UP") setDir("DOWN");
       if (cmd === "LEFT" && dir !== "RIGHT") setDir("LEFT");
       if (cmd === "RIGHT" && dir !== "LEFT") setDir("RIGHT");
+
+      if (!isRunning && timeElapsed === 0) {
+        start();
+      }
     },
     getState: async () => {
       return {
@@ -163,7 +209,7 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
           dir,
         },
         current_score: score,
-        time_elapsed: 0,
+        time_elapsed: timeElapsed,
       };
     },
     loadState: (session) => {
@@ -178,10 +224,20 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
           if (parsed.dir) setDir(parsed.dir);
         }
         if (session.current_score != null) setScore(session.current_score);
+        if (session.time_elapsed != null) {
+          load(Number(session.time_elapsed) || 0, false);
+        }
       } catch (err) {
         console.error("Lỗi loadState Snake:", err);
       }
-    }
+    },
+    startTimer: () => start(),
+    pauseTimer: () => pause(),
+    resetTimer: () => {
+      reset();
+      setHasReported(false);
+    },
+    getTime: () => timeElapsed,
   }));
 
   const renderButton = (r, c) => {
@@ -207,6 +263,11 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
 
   return (
     <div className="bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-2xl">
+      <div className="mb-2 text-center text-gray-300 text-xs">
+        Time: {formatTime ? formatTime(timeElapsed) : (timeElapsed / 1000).toFixed(1)}{" "}
+        {isRunning ? "(running)" : isGameOver ? "(stopped)" : "(paused)"}
+      </div>
+
       <div
         className="grid gap-1"
         style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}

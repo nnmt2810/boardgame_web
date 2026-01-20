@@ -1,6 +1,7 @@
-import { useState, useImperativeHandle, forwardRef, useContext } from "react";
+import React, { useState, useImperativeHandle, forwardRef, useContext, useEffect } from "react";
 import { AuthContext } from "../../contexts/AuthContext";
 import axiosClient from "../../api/axiosClient";
+import useGameTimer from "../../hooks/useGameTimer";
 
 const ROWS = 15;
 const COLS = 15;
@@ -10,7 +11,7 @@ const START_C = 6,
   END_C = 8;
 
 const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
-  const { user } = useContext(AuthContext);
+  const { user, setUser } = useContext(AuthContext);
   const [board, setBoard] = useState(
     Array(3)
       .fill()
@@ -19,6 +20,7 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
   const [winner, setWinner] = useState(null);
   const [cursor, setCursor] = useState([7, 7]);
   const [hasReported, setHasReported] = useState(false);
+  const { timeElapsed, isRunning, start, pause, reset, load, formatTime } = useGameTimer();
 
   const checkWin = (b) => {
     const lines = [
@@ -36,18 +38,24 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     return null;
   };
 
-  // Hàm gửi thắng lên backend
+  // Gửi thắng lên backend
   const reportWin = async () => {
     if (!user || hasReported) return;
-
+    setHasReported(true);
     try {
-      setHasReported(true);
-
       try {
-        await axiosClient.post("/users/stats/update", {
+        const resp = await axiosClient.post("/users/stats/update", {
           stat_type: "win",
           value: 1,
+          game_code: "tictactoe",
         });
+        if (resp?.data?.user && typeof setUser === "function") {
+          try {
+            setUser(resp.data.user);
+          } catch (err) {
+            console.warn("Không thể setUser từ response:", err);
+          }
+        }
       } catch (err) {
         console.warn("Cập nhật stats user thất bại:", err);
       }
@@ -92,9 +100,25 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     const win = checkWin(newBoard);
     if (win) {
       setWinner(win);
-      onWinnerChange(win);
     }
   };
+
+  useEffect(() => {
+    if (!winner) return;
+
+    try {
+      onWinnerChange && onWinnerChange(winner);
+    } catch (err) {
+      console.warn("onWinnerChange error:", err);
+    }
+
+    // Dừng timer khi game kết thúc
+    pause();
+
+    if (winner === "X") {
+      reportWin();
+    }
+  }, [winner]);
 
   useImperativeHandle(ref, () => ({
     handleCommand: (cmd) => {
@@ -112,19 +136,25 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
           const newBoard = board.map((row) => [...row]);
           newBoard[boardR][boardC] = "X";
           setBoard(newBoard);
+
+          // Bắt đầu timer ở nước đi đầu tiên của người chơi
+          if (!isRunning && timeElapsed === 0) start();
+
           const win = checkWin(newBoard);
           if (win) {
             setWinner(win);
-            onWinnerChange(win);
-            if (win === "X") {
-              // Người chơi thắng
-              reportWin();
-            }
+            // report xử lý trong useEffect
           } else {
             setTimeout(() => aiMove(newBoard), 400);
           }
         }
       }
+
+      if (cmd === "BACK") {
+        // Pause timer khi thoát
+        pause();
+      }
+
       setCursor([r, c]);
       onCursorChange([r, c]);
     },
@@ -132,7 +162,7 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       return {
         matrix_state: board,
         current_score: 0,
-        time_elapsed: 0,
+        time_elapsed: timeElapsed, // trả thời gian đã trôi qua (ms)
       };
     },
     loadState: (session) => {
@@ -142,10 +172,17 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
             ? JSON.parse(session.matrix_state)
             : session.matrix_state;
         if (parsed) setBoard(parsed);
+        if (session.time_elapsed != null) {
+          load(Number(session.time_elapsed) || 0, false);
+        }
       } catch (err) {
         console.error("Lỗi loadState TicTacToe:", err);
       }
-    }
+    },
+    startTimer: () => start(),
+    pauseTimer: () => pause(),
+    resetTimer: () => reset(),
+    getTime: () => timeElapsed,
   }));
 
   const renderButton = (r, c) => {
@@ -185,6 +222,10 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
 
   return (
     <div className="bg-black p-4 rounded-3xl border-12 border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+      <div className="mb-3 text-xs text-gray-300">
+        Time: {formatTime ? formatTime(timeElapsed) : (timeElapsed / 1000).toFixed(1)} {isRunning ? "(running)" : winner ? "(stopped)" : "(paused)"}
+      </div>
+
       <div
         className="grid gap-1.5"
         style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}
