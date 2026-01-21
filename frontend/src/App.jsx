@@ -1,4 +1,4 @@
-import {
+﻿import {
   BrowserRouter as Router,
   Routes,
   Route,
@@ -15,6 +15,7 @@ import Profile from "./pages/Profile";
 import Friends from "./pages/Friends";
 import MessagesPage from "./pages/Messages";
 import AdminDashboard from "./pages/AdminDashboard";
+import ApiDocs from "./pages/ApiDocs";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
@@ -82,6 +83,15 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/api-docs"
+              element={
+                <ProtectedRoute>
+                  <ApiDocs />
                 </ProtectedRoute>
               }
             />

@@ -12,6 +12,7 @@ const messageRoutes = require('./routes/messageRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const ratingRoutes = require('./routes/ratingRoutes');
 const commentRoutes = require('./routes/commentRoutes');
+const apiKeyRoutes = require('./routes/apiKeyRoutes');
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ratings', ratingRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api', apiKeyRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'Chào mừng bạn đến với Board Game API' });
