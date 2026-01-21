@@ -23,22 +23,6 @@ const Caro5Game = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     if (!user || hasReported) return;
     setHasReported(true);
     try {
-      // Cập nhật thống kê user
-      const statResp = await axiosClient.post("/users/stats/update", {
-        stat_type: "win",
-        value: 1,
-        game_code: "caro5",
-      });
-
-      // Nếu backend trả updated user, cập nhật AuthContext ngay
-      if (statResp?.data?.user) {
-        try {
-          setUser(statResp.data.user);
-        } catch (err) {
-          console.warn("Không thể setUser từ response:", err);
-        }
-      }
-
       // Cập nhật bảng xếp hạng (win-based)
       try {
         await axiosClient.post("/games/update-score", {

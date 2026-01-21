@@ -45,20 +45,6 @@ const MemoryGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
 
     setHasReported(true);
     try {
-      const resp = await axiosClient.post("/users/stats/update", {
-        stat_type: "win",
-        value: 1,
-        game_code: "memory",
-      });
-
-      if (resp?.data?.user && typeof setUser === "function") {
-        try {
-          setUser(resp.data.user);
-        } catch (err) {
-          console.warn("Không thể setUser từ response:", err);
-        }
-      }
-
       try {
         await axiosClient.post("/games/update-score", {
           game_id: "memory",

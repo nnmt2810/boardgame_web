@@ -21,8 +21,11 @@ function pickMetric(gameRow, metricOverride) {
 
   if (!gameRow) return "high_score";
   const code = (gameRow.code || "").toLowerCase();
-  if (code === "snake") return "high_score";
-  // Mặc định các game không phải snake coi là win-based
+  
+  // Các game dựa trên điểm số (score-based)
+  if (code === "snake" || code === "match3") return "high_score";
+  
+  // Mặc định các game khác coi là win-based (caro, tictactoe, etc.)
   return "total_wins";
 }
 
@@ -38,6 +41,8 @@ exports.getLeaderboard = async (req, res) => {
     }
 
     const metric = pickMetric(game, metricOverride);
+
+    console.log(`Leaderboard for ${game.code} using metric: ${metric}`);
 
     // Chuẩn bị cột select theo metric
     const selectCols = ["users.id as user_id", "users.username"];
@@ -112,6 +117,9 @@ exports.updateScore = async (req, res) => {
       const updated = await db("rankings")
         .where({ user_id, game_id: game.id })
         .first();
+      
+      console.log(`✓ Win recorded for ${game.code}: user ${user_id}, total_wins: ${updated.total_wins}`);
+      
       return res.json({ message: "Cập nhật thắng thành công", data: updated });
     }
 
@@ -132,6 +140,7 @@ exports.updateScore = async (req, res) => {
           high_score: numScore,
           total_wins: 0,
         });
+        console.log(`✓ New high score for ${game.code}: user ${user_id}, score: ${numScore}`);
       } else if (numScore > (existing.high_score || 0)) {
         await db("rankings")
           .where({ user_id, game_id: game.id })
@@ -139,7 +148,11 @@ exports.updateScore = async (req, res) => {
             high_score: numScore,
             updated_at: db.raw("NOW()"),
           });
+        console.log(`✓ Updated high score for ${game.code}: user ${user_id}, ${existing.high_score} → ${numScore}`);
+      } else {
+        console.log(`Score not updated for ${game.code}: ${numScore} <= ${existing.high_score}`);
       }
+      
       const updated = await db("rankings")
         .where({ user_id, game_id: game.id })
         .first();

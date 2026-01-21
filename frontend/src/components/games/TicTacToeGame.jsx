@@ -43,23 +43,6 @@ const TicTacToeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
     if (!user || hasReported) return;
     setHasReported(true);
     try {
-      try {
-        const resp = await axiosClient.post("/users/stats/update", {
-          stat_type: "win",
-          value: 1,
-          game_code: "tictactoe",
-        });
-        if (resp?.data?.user && typeof setUser === "function") {
-          try {
-            setUser(resp.data.user);
-          } catch (err) {
-            console.warn("Không thể setUser từ response:", err);
-          }
-        }
-      } catch (err) {
-        console.warn("Cập nhật stats user thất bại:", err);
-      }
-
       // Cập nhật bảng xếp hạng game
       try {
         await axiosClient.post("/games/update-score", {

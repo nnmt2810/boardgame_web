@@ -4,11 +4,46 @@ exports.getProfile = async (req, res) => {
   try {
     const user_id = req.user.id; // Lấy từ Token sau khi verify
 
-    // Lấy thông tin cơ bản của user kèm stats
+    // Lấy thông tin cơ bản của user
     const user = await db('users')
       .where({ id: user_id })
-      .select('id', 'username', 'email', 'total_wins', 'snake_high_score', 'created_at')
+      .select('id', 'username', 'email', 'created_at', 'role')
       .first();
+
+    if (!user) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    // ===== TÍNH TỔNG TRẬN THẮNG TỪ RANKINGS =====
+    // Tổng tất cả total_wins từ mọi game trong rankings
+    const totalWinsResult = await db('rankings')
+      .where('user_id', user_id)
+      .sum('total_wins as total')
+      .first();
+    
+    const total_wins = totalWinsResult?.total || 0;
+
+    // ===== LẤY ĐIỂM CAO NHẤT SNAKE TỪ RANKINGS =====
+    const snakeGame = await db('games').where({ code: 'snake' }).first();
+    let snake_high_score = 0;
+    if (snakeGame) {
+      const snakeRanking = await db('rankings')
+        .where({ user_id, game_id: snakeGame.id })
+        .select('high_score')
+        .first();
+      snake_high_score = snakeRanking?.high_score || 0;
+    }
+
+    // ===== LẤY ĐIỂM CAO NHẤT MATCH3 TỪ RANKINGS =====
+    const match3Game = await db('games').where({ code: 'match3' }).first();
+    let match3_high_score = 0;
+    if (match3Game) {
+      const match3Ranking = await db('rankings')
+        .where({ user_id, game_id: match3Game.id })
+        .select('high_score')
+        .first();
+      match3_high_score = match3Ranking?.high_score || 0;
+    }
 
     // Lấy danh sách bạn bè
     const friendsList = await db('friends')
@@ -22,7 +57,7 @@ exports.getProfile = async (req, res) => {
     const friendIds = friendsList.map(f => f.user_id === user_id ? f.friend_id : f.user_id);
     const friendsDetails = await db('users')
       .whereIn('id', friendIds)
-      .select('id', 'username');
+      .select('id', 'username', 'email');
 
     // Lấy số lượng bạn bè
     const totalFriends = friendsDetails.length;
@@ -31,63 +66,41 @@ exports.getProfile = async (req, res) => {
     const topScores = await db('rankings')
       .join('games', 'rankings.game_id', '=', 'games.id')
       .where('rankings.user_id', user_id)
-      .select('games.name as game_name', 'rankings.high_score', 'rankings.updated_at');
+      .select('games.name as game_name', 'games.code as game_code', 'rankings.high_score', 'rankings.total_wins', 'rankings.updated_at');
     
     console.log('Profile data:', {
       user_id,
-      friendsCount: friendsDetails.length,
-      totalFriends
+      total_wins,
+      snake_high_score,
+      match3_high_score,
+      friendsCount: friendsDetails.length
     });
     
+    // Trả về userInfo với stats đã tính toán
     res.json({
-      userInfo: user,
+      userInfo: {
+        ...user,
+        total_wins,
+        snake_high_score,
+        match3_high_score
+      },
       friends: friendsDetails,
       totalFriends: totalFriends,
       achievements: topScores
     });
 
   } catch (error) {
+    console.error('Error in getProfile:', error);
     res.status(500).json({ message: "Lỗi lấy thông tin Profile", error: error.message });
   }
 };
 
-// Cập nhật thống kê người chơi (trận thắng hoặc điểm cao Snake)
+// Cập nhật thống kê người chơi (DEPRECATED - không cần dùng nữa vì đã có rankings)
 exports.updatePlayerStats = async (req, res) => {
   try {
-    const user_id = req.user.id;
-    const { stat_type, value } = req.body;
-
-    const user = await db('users').where({ id: user_id }).first();
-    if (!user) {
-      return res.status(404).json({ message: "Người dùng không tồn tại" });
-    }
-
-    const updateData = {};
-
-    if (stat_type === 'win') {
-      // Cộng thêm 1 trận thắng
-      updateData.total_wins = (user.total_wins || 0) + 1;
-    } else if (stat_type === 'snake_score') {
-      // Cập nhật điểm Snake nếu cao hơn
-      if (value > (user.snake_high_score || 0)) {
-        updateData.snake_high_score = value;
-      }
-    } else {
-      return res.status(400).json({ message: "Loại thống kê không hợp lệ" });
-    }
-
-    if (Object.keys(updateData).length > 0) {
-      await db('users').where({ id: user_id }).update(updateData);
-    }
-
-    res.json({ 
-      message: "Cập nhật thống kê thành công",
-      stats: {
-        total_wins: updateData.total_wins || user.total_wins,
-        snake_high_score: updateData.snake_high_score || user.snake_high_score
-      }
+    return res.status(400).json({ 
+      message: "API này đã deprecated. Vui lòng sử dụng /games/update-score để cập nhật điểm số" 
     });
-
   } catch (error) {
     res.status(500).json({ message: "Lỗi cập nhật thống kê", error: error.message });
   }

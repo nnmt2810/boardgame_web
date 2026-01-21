@@ -35,20 +35,6 @@ const SnakeGame = forwardRef(({ onWinnerChange, onCursorChange }, ref) => {
       if (!user || hasReported || finalScore <= 0) return;
       setHasReported(true);
       try {
-        const resp = await axiosClient.post("/users/stats/update", {
-          stat_type: "snake_score",
-          value: finalScore,
-          game_code: "snake",
-        });
-
-        if (resp?.data?.user && typeof setUser === "function") {
-          try {
-            setUser(resp.data.user);
-          } catch (err) {
-            console.warn("Không thể setUser từ response:", err);
-          }
-        }
-
         try {
           await axiosClient.post("/games/update-score", {
             game_id: "snake",
