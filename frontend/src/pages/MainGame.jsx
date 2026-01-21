@@ -12,6 +12,7 @@ import { HelpCircle } from "lucide-react";
 import { AuthContext } from "../contexts/AuthContext";
 import { saveToLocal, loadFromLocal, deleteLocal } from "../utils/localSaves";
 import LeaderboardPanel from "../components/LeaderboardPanel";
+import GameReviewPanel from '../components/GameReviewPanel';
 
 const ROWS = 15;
 const COLS = 15;
@@ -490,6 +491,13 @@ const MainGame = () => {
             <div className="mt-4">
               <LeaderboardPanel gameId={selectedGame?.id ?? null} compact={true} />
             </div>
+
+            {/* Game Reviews */}
+            {view === "IN_GAME" && selectedGame && (
+              <div className="mt-4">
+                <GameReviewPanel gameId={selectedGame.id} gameName={selectedGame.name} />
+              </div>
+            )}
 
           </div>
         </div>

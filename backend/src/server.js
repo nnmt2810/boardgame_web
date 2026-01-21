@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const express = require('express');
 const https = require('https');
 const fs = require('fs');
@@ -10,6 +10,8 @@ const friendRoutes = require('./routes/friendRoutes');
 const userRoutes = require('./routes/userRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const ratingRoutes = require('./routes/ratingRoutes');
+const commentRoutes = require('./routes/commentRoutes');
 
 const app = express();
 
@@ -23,6 +25,8 @@ app.use('/api/friends', friendRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/ratings', ratingRoutes);
+app.use('/api/comments', commentRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'Chào mừng bạn đến với Board Game API' });
@@ -47,7 +51,7 @@ if (process.env.USE_HTTPS === 'true') {
   };
 
   https.createServer(httpsOptions, app).listen(PORT, () => {
-    console.log(`🔒 HTTPS Server đang chạy tại: https://localhost:${PORT}`);
+    console.log(` HTTPS Server đang chạy tại: https://localhost:${PORT}`);
   });
 } else {
   app.listen(PORT, () => {
